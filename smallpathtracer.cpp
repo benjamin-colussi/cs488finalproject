@@ -197,6 +197,8 @@ int main(int argc, char *argv[]) {
     Ray cam(Vec(50,52,295.6), Vec(0,-0.042612,-1).norm());
     Vec cx = Vec(w * .5135 / h);
     Vec cy = (cx % cam.d).norm() * .5135;
+
+	// ray colour and image vector
     Vec r;
     Vec* c = new Vec[w * h];
 

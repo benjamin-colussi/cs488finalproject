@@ -22,15 +22,15 @@
 
 
 
+// hello world
 #pragma once
-#define _CRT_SECURE_NO_WARNINGS
 #define NOMINMAX
 
 // linear algebra 
 #include "linalg.h"
 using namespace linalg::aliases;
 
-// misc
+// standard crap
 #include <iostream>
 #include <vector>
 #include <cfloat>
@@ -46,8 +46,8 @@ using namespace linalg::aliases;
 
 
 // window size and resolution
-constexpr int globalWidth = 512; // 512 / 4 = 128
-constexpr int globalHeight = 384; // 384 / 4 = 96
+constexpr int globalWidth = 512;
+constexpr int globalHeight = 384;
 
 // degree and radian
 constexpr float PI = 3.14159265358979f;
@@ -58,17 +58,27 @@ constexpr float RadToDeg = 180.0f / PI;
 constexpr float Epsilon = 5e-5f;
 
 // fixed camera parameters
-constexpr float globalAspectRatio = float(globalWidth / float(globalHeight));
-constexpr float globalFOV = 45.0f; // vertical field of view
-constexpr float globalFilmSize = 0.032f; //for ray tracing
-const float globalDistanceToFilm = globalFilmSize / (2.0f * tan(globalFOV * DegToRad * 0.5f)); // for ray tracing
+constexpr float globalAspectRatio = static_cast<float>(globalWidth) / static_cast<float>(globalHeight);
+constexpr float globalFOV = 45.0f;
+constexpr float globalFilmSize = 0.032f;
+const float globalDistanceToFilm = globalFilmSize / (2.0f * tan(globalFOV * DegToRad * 0.5f));
 
 // dynamic camera parameters
-float3 globalEye = float3(0.0f, 0.0f, 1.5f);
-float3 globalLookat = float3(0.0f, 0.0f, 0.0f);
-float3 globalUp = normalize(float3(0.0f, 1.0f, 0.0f));
-float3 globalViewDir = normalize(globalLookat - globalEye);
-float3 globalRight = normalize(cross(globalViewDir, globalUp));
+constexpr float3 globalEye(0.0f, 0.0f, 1.5f);
+constexpr float3 globalLookat(0.0f, 0.0f, 0.0f);
+constexpr float3 globalUp(0.0f, 1.0f, 0.0f);
+const float3 globalViewDir = normalize(globalLookat - globalEye);
+const float3 globalRight = normalize(cross(globalViewDir, globalUp));
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 
 // fast random number generator based pcg32_fast
 #include <stdint.h>
@@ -102,15 +112,8 @@ constexpr int MAX_REFLECTION_RECURSION_DEPTH = 4;
 constexpr int MAX_REFRACTION_RECURSION_DEPTH = 4;
 constexpr float REFRACTION_INDEX_AIR = 1.00029f;
 
-// global variables
-int RAY_ACCUMULATION = 0;
-std::chrono::time_point<std::chrono::steady_clock> TIME_START; // start time in clock
-std::chrono::time_point<std::chrono::steady_clock> TIME_STOP; // stop time in clock
-std::chrono::duration<double> TIME_ACCUMULATION; // total time in seconds
-
 // switches
 constexpr bool SWORD_OF_LIGHT_AND_SHADOW = true;
-constexpr bool MEASURE_RAYS_PER_SECOND = true;
 
 // utilities
 inline float min_of_3_floats(const float& a, const float& b, const float& c) {
@@ -182,13 +185,15 @@ public:
 	float3 position, wattage;
 };
 
-// ray
-class Ray {
-public:
-	float3 o, d;
-	Ray() : o(), d(float3(0.0f, 0.0f, 1.0f)) {}
-	Ray(const float3& o, const float3& d) : o(o), d(d) {}
-};
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 
 // uber material
 enum enumMaterialType {
@@ -286,6 +291,24 @@ class Material {
 			pdfValue = PDF(wGiven, smp);
 			return smp;
 		}
+};
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+// ray
+class Ray {
+	public:
+		float3 o, d;
+		Ray() : o(), d(float3(0.0f, 0.0f, 1.0f)) {}
+		Ray(const float3& o, const float3& d) : o(o), d(d) {}
 };
 
 // hit info
@@ -1378,6 +1401,10 @@ bool BVH::traverse(HitInfo& minHit, const Ray& ray, int node_id, float tMin, flo
 // scene definition
 class Scene {
 
+	private:
+
+
+
 	public:
 
 		// scene components
@@ -1389,52 +1416,19 @@ class Scene {
 		void addObject(TriangleMesh* pObj) { objects.push_back(pObj); }
 
 		// add point light source to scene
-		void addLight(PointLightSource* pObj) { pointLightSources.push_back(pObj); }
+		void addPointLightSource(PointLightSource* pObj) { pointLightSources.push_back(pObj); }
 
 		// compute BVH
 		void preCalc() {
 			bvhs.resize(objects.size());
-			for (int i = 0; i < objects.size(); i++) {
+			for (int i = 0; i < objects.size(); ++i) {
 				objects[i]->preCalc();
 				bvhs[i].build(objects[i]);
 			}
 		}
 
-		// ray-scene intersection
-		bool intersect(HitInfo& minHit, const Ray& ray, float tMin = 0.0f, float tMax = FLT_MAX) const {
-
-			// start clock
-			if (MEASURE_RAYS_PER_SECOND) {
-				RAY_ACCUMULATION++;
-				TIME_START = std::chrono::steady_clock::now();
-			}
-
-			// check for intersection
-			bool hit = false;
-			HitInfo tempMinHit;
-			minHit.t = FLT_MAX;
-			for (int i = 0, i_n = (int)objects.size(); i < i_n; i++) {
-				// if (objects[i]->bruteforceIntersect(tempMinHit, ray, tMin, tMax)) { // for debugging
-				if (bvhs[i].intersect(tempMinHit, ray, tMin, tMax)) {
-					if (tempMinHit.t < minHit.t) {
-						hit = true;
-						minHit = tempMinHit;
-					}
-				}
-			}
-
-			// stop clock
-			if (MEASURE_RAYS_PER_SECOND) {
-				TIME_STOP = std::chrono::steady_clock::now();
-				TIME_ACCUMULATION += TIME_STOP - TIME_START;
-			}
-
-			// return
-			return hit;
-		}
-
 		// eye ray generation
-		Ray eyeRay(int x, int y) const {
+		static Ray eyeRay(const int x, const int y) {
 
 			// compute the camera coordinate system
 			const float3 wDir = normalize(-globalViewDir); // back
@@ -1442,32 +1436,62 @@ class Scene {
 			const float3 vDir = cross(wDir, uDir); // up
 
 			// compute the pixel location in world coordinate space using camera coordinate space
-			const float imPlaneUPos = (x + 0.5f) / float(globalWidth) - 0.5f;
-			const float imPlaneVPos = (y + 0.5f) / float(globalHeight) - 0.5f;
-			const float3 pixelPos = globalEye + float(globalAspectRatio * globalFilmSize * imPlaneUPos) * uDir + float(globalFilmSize * imPlaneVPos) * vDir - globalDistanceToFilm * wDir;
+			const float imPlaneUPos = (static_cast<float>(x) + 0.5f) / static_cast<float>(globalWidth) - 0.5f;
+			const float imPlaneVPos = (static_cast<float>(y) + 0.5f) / static_cast<float>(globalHeight) - 0.5f;
+			const float3 pixelPos = globalEye + globalAspectRatio * globalFilmSize * imPlaneUPos * uDir + globalFilmSize * imPlaneVPos * vDir - globalDistanceToFilm * wDir;
 
 			// trace ray through centre of each pixel
-			return Ray(globalEye, normalize(pixelPos - globalEye));
+			return Ray{globalEye, normalize(pixelPos - globalEye)};
 		}
 
+		// ray-scene intersection
+		bool intersect(HitInfo& minHit, const Ray& ray, const float tMin = 0.0f, const float tMax = FLT_MAX) const {
+			bool hit = false;
+			HitInfo tempMinHit;
+			minHit.t = FLT_MAX;
+			for (int i = 0, i_n = static_cast<int>(objects.size()); i < i_n; ++i) {
+				if (bvhs[i].intersect(tempMinHit, ray, tMin, tMax)) {
+					if (tempMinHit.t < minHit.t) {
+						hit = true;
+						minHit = tempMinHit;
+					}
+				}
+			}
+			return hit;
+		}
+
+
+
 		// ray tracing
-		void Raytrace() const {
+		void rayTrace() const {
 			FrameBuffer.clear();
 
 			// loop over all pixels in the image
 			for (int j = 0; j < globalHeight; ++j) {
 				for (int i = 0; i < globalWidth; ++i) {
 					const Ray ray = eyeRay(i, j);
-					HitInfo hitInfo;
 
 					// intersection with object
-					if (intersect(hitInfo, ray) == true) FrameBuffer.pixel(i, j) = shade(hitInfo, -ray.d);
+					if (HitInfo hitInfo; intersect(hitInfo, ray) == true) FrameBuffer.pixel(i, j) = shade(hitInfo, -ray.d);
 
 					// no intersection
 					else FrameBuffer.pixel(i, j) = float3(0.0f);
 				}
 			}
 		}
+
+
+
+
+
+		// path tracing
+		void pathTrace() const {
+
+		}
+
+
+
+
 
 };
 static Scene globalScene;
