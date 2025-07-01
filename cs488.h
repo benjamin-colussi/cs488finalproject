@@ -6,11 +6,11 @@
 
 
 
-// =======================================
+//==================================
 // CS 488/688 base code
 // (written by Toshiya Hachisuka)
 // (extended by Benjamin Colussi)
-// =======================================
+//==================================
 
 
 
@@ -25,12 +25,6 @@
 #pragma once
 #define _CRT_SECURE_NO_WARNINGS
 #define NOMINMAX
-
-// image loader and writer
-#define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image.h"
-#include "stb_image_write.h"
 
 // linear algebra 
 #include "linalg.h"
@@ -148,17 +142,6 @@ class Image {
 		std::vector<float3> pixels;
 		int width = 0, height = 0;
 
-		static float toneMapping(const float r) {
-			// you may want to implement better tone mapping
-			return std::max(std::min(1.0f, r), 0.0f);
-		}
-
-		static float gammaCorrection(const float r, const float gamma = 1.0f) {
-			// assumes r is within 0 to 1
-			// gamma is typically 2.2, but the default is 1.0 to make it linear
-			return pow(r, 1.0f / gamma);
-		}
-
 		void resize(const int newWidth, const int newHeight) {
 			this->pixels.resize(newWidth * newHeight);
 			this->width = newWidth;
@@ -174,67 +157,14 @@ class Image {
 			this->clear();
 		}
 
-		bool valid(const int i, const int j) const {
-			return i >= 0 && i < this->width && j >= 0 && j < this->height;
-		}
-
 		float3& pixel(const int i, const int j) {
 			return this->pixels[i + j * width]; // can check if Image::valid() but is slow
-		}
-
-		bool load(const char* fileName) {
-			int comp, w, h;
-			float* buf = stbi_loadf(fileName, &w, &h, &comp, 3);
-			if (!buf) {
-				std::cerr << "Unable to load: " << fileName << std::endl;
-				return false;
-			}
-			this->resize(w, h);
-			int k = 0;
-			for (int j = height - 1; j >= 0; j--) {
-				for (int i = 0; i < width; i++) {
-					this->pixels[i + j * width] = float3(buf[k], buf[k + 1], buf[k + 2]);
-					k += 3;
-				}
-			}
-			delete[] buf;
-			printf("Loaded \"%s\".\n", fileName);
-			return true;
-		}
-
-		void save(const char* fileName) {
-			unsigned char* buf = new unsigned char[width * height * 3];
-			int k = 0;
-			for (int j = height - 1; j >= 0; j--) {
-				for (int i = 0; i < width; i++) {
-					buf[k++] = (unsigned char)(255.0f * gammaCorrection(toneMapping(pixel(i, j).x)));
-					buf[k++] = (unsigned char)(255.0f * gammaCorrection(toneMapping(pixel(i, j).y)));
-					buf[k++] = (unsigned char)(255.0f * gammaCorrection(toneMapping(pixel(i, j).z)));
-				}
-			}
-			stbi_write_png(fileName, width, height, 3, buf, width * 3);
-			delete[] buf;
-			printf("Saved \"%s\".\n", fileName);
 		}
 
 };
 
 // main image buffer to be displayed
 Image FrameBuffer(globalWidth, globalHeight);
-
-// you may want to use the following later for progressive ray tracing
-Image AccumulationBuffer(globalWidth, globalHeight);
-unsigned int sampleCount = 0;
-
-// environment mapping
-bool BackgroundImageProvided = false;
-Image BackgroundImage;
-float3 imageProbe(Image& i, const float3 d) {
-	const float r = (1.0f / PI) * acosf(d[2]) / sqrtf(d[0] * d[0] + d[1] * d[1]);
-	const int u = (d[0] * r + 1.0f) / 2.0f * i.width;
-	const int v = (d[1] * r + 1.0f) / 2.0f * i.height;
-	return i.pixel(u, v);
-}
 
 
 
@@ -677,20 +607,12 @@ class TriangleMesh {
 
 	private:
 
-		// ===== no need to modify the following in this class =====
-		void loadTexture(const char* fname, const int i) {
-			int comp;
-			materials[i].texture = stbi_load(fname, &materials[i].textureWidth, &materials[i].textureHeight, &comp, 3);
-			if (!materials[i].texture) {
-				std::cerr << "Unable to load texture: " << fname << std::endl;
-				return;
-			}
-		}
 		std::string GetBaseDir(const std::string& filepath) {
 			if (filepath.find_last_of("/\\") != std::string::npos) return filepath.substr(0, filepath.find_last_of("/\\"));
 			return "";
 		}
 		std::string base_dir;
+
 		void LoadMTL(const std::string fileName) {
 			FILE* fp = fopen(fileName.c_str(), "r");
 
@@ -729,12 +651,12 @@ class TriangleMesh {
 					lineStr.erase(0, 7);
 					lineStr.erase(lineStr.size() - 1, 1);
 					materials[i - 1].isTextured = true;
-					loadTexture((base_dir + lineStr).c_str(), i - 1);
 				}
 			}
 
 			fclose(fp);
 		}
+
 		void ParseOBJ(const char* fileName, int& nVertices, float** vertices, float** normals, float** texcoords, int& nIndices, int** indices, int** materialids) {
 		// local function in C++...
 		struct {
@@ -1542,14 +1464,7 @@ class Scene {
 					if (intersect(hitInfo, ray) == true) FrameBuffer.pixel(i, j) = shade(hitInfo, -ray.d);
 
 					// no intersection
-					else {
-
-						// hits the background
-						if (BackgroundImageProvided == true) FrameBuffer.pixel(i, j) = imageProbe(BackgroundImage, ray.d);
-
-						// hits the void
-						else FrameBuffer.pixel(i, j) = float3(0.0f);
-					}
+					else FrameBuffer.pixel(i, j) = float3(0.0f);
 				}
 			}
 		}
@@ -1643,9 +1558,6 @@ static float3 shade(const HitInfo& hit, const float3& viewDir, const int level) 
 			return hit.material->Ks * shade(h, -r.d, newlevel);
 		}
 
-		// hits the background
-		if (BackgroundImageProvided == true) return imageProbe(BackgroundImage, r.d);
-
 		// hits the void
 		return float3(0.0f);
 	}
@@ -1669,9 +1581,6 @@ static float3 shade(const HitInfo& hit, const float3& viewDir, const int level) 
 			HitInfo h;
 			if (globalScene.intersect(h, r)) return shade(h, -r.d, newlevel);
 
-			// hits the background
-			if (BackgroundImageProvided == true) return imageProbe(BackgroundImage, r.d);
-
 			// hits the void
 			return float3(0.0f);
 		}
@@ -1690,9 +1599,6 @@ static float3 shade(const HitInfo& hit, const float3& viewDir, const int level) 
 			HitInfo h;
 			if (globalScene.intersect(h, r)) return shade(h, -r.d, newlevel);
 
-			// hits the background
-			if (BackgroundImageProvided == true) return imageProbe(BackgroundImage, r.d);
-
 			// hits the void
 			return float3(0.0f);
 		}
@@ -1705,15 +1611,12 @@ static float3 shade(const HitInfo& hit, const float3& viewDir, const int level) 
 		HitInfo h;
 		if (globalScene.intersect(h, r)) return shade(h, -r.d, newlevel);
 
-		// hits the background
-		if (BackgroundImageProvided == true) return imageProbe(BackgroundImage, r.d);
-
 		// hits the void
 		return float3(0.0f);
 	}
 
 	// something went wrong - make it apparent that it is an error
-	return float3(100.0f, 0.0f, 100.0f);
+	return float3{100.0f, 0.0f, 100.0f};
 }
 
 

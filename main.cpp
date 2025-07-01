@@ -1,8 +1,7 @@
-/*
- * FINAL PROJECT
- * for CS 488 - Spring 2025
- * by Benjamin Colussi
- */
+//==========================
+// CS 488 - FINAL PROJECT
+// (by Benjamin Colussi)
+//==========================
 
 
 
@@ -28,7 +27,7 @@ static PointLightSource light;
 int main(int argc, const char* argv[]) {
 
     // .ppm file path
-    std::string filename;
+    std::string filename = "no-object.ppm";
 
     // load .obj on command line
     if (argc > 1) {
@@ -40,14 +39,13 @@ int main(int argc, const char* argv[]) {
         }
         else {
             const std::string s = argv[1];
-            filename = s.substr(0, s.find_last_of('.')) + ".ppm";
+            filename = s.substr(0, s.length() - 4) + ".ppm";
         }
     }
     else {
         printf("Specify .obj file in the command line arguments. Example: CS488.exe cornellbox.obj\n");
         printf("Making a single triangle instead.\n");
         mesh.createSingleTriangle();
-        filename = "single-triangle.ppm";
     }
     globalScene.addObject(&mesh);
 

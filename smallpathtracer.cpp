@@ -68,19 +68,19 @@ struct Sphere {
 Sphere spheres[] = {
 
 	// left, right, back, front, bottom, top
-	Sphere(1e5, Vec( 1e5+1,40.8,81.6), Vec(),Vec(.75,.25,.25),DIFFUSE),
-	Sphere(1e5, Vec(-1e5+99,40.8,81.6),Vec(),Vec(.25,.25,.75),DIFFUSE),
-	Sphere(1e5, Vec(50,40.8, 1e5),     Vec(),Vec(.75,.75,.75),DIFFUSE),
-	Sphere(1e5, Vec(50,40.8,-1e5+170), Vec(),Vec(),           DIFFUSE),
-	Sphere(1e5, Vec(50, 1e5, 81.6),    Vec(),Vec(.75,.75,.75),DIFFUSE),
-	Sphere(1e5, Vec(50,-1e5+81.6,81.6),Vec(),Vec(.75,.75,.75),DIFFUSE),
+	Sphere(1e5, Vec( 1e5+1,40.8,81.6), Vec(),Vec(.75,.25,.25), DIFFUSE),
+	Sphere(1e5, Vec(-1e5+99,40.8,81.6),Vec(),Vec(.25,.25,.75), DIFFUSE),
+	Sphere(1e5, Vec(50,40.8, 1e5),     Vec(),Vec(.75,.75,.75), DIFFUSE),
+	Sphere(1e5, Vec(50,40.8,-1e5+170), Vec(),Vec(), DIFFUSE),
+	Sphere(1e5, Vec(50, 1e5, 81.6),    Vec(),Vec(.75,.75,.75), DIFFUSE),
+	Sphere(1e5, Vec(50,-1e5+81.6,81.6),Vec(),Vec(.75,.75,.75), DIFFUSE),
 
-	// mirror ball, glass ball
-	Sphere(16.5,Vec(27,16.5,47),       Vec(),Vec(1,1,1)*.999, SPECULAR),
-	Sphere(16.5,Vec(73,16.5,78),       Vec(),Vec(1,1,1)*.999, REFRACTIVE),
+	// balls
+	Sphere(16.5,Vec(27,16.5,47),Vec(),Vec(1,1,1)*.999, SPECULAR),
+	Sphere(16.5,Vec(73,16.5,78),Vec(),Vec(1,1,1)*.999, REFRACTIVE),
 
 	// light
-	Sphere(1.5, Vec(50,81.6-16.5,81.6),Vec(4,4,4)*100,  Vec(), DIFFUSE),
+	Sphere(1.5, Vec(50,81.6-16.5,81.6),Vec(4,4,4)*100,Vec(), DIFFUSE),
 };
 
 
@@ -230,11 +230,11 @@ int main(int argc, char *argv[]) {
 
                         Vec d = cx * (((sx + .5 + dx) / 2 + x) / w - .5) + cy * (((sy + .5 + dy) / 2 + y) / h - .5) + cam.d;
 
-                        r = r + radiance(Ray(cam.o + d * 140, d.norm()), 0, Xi) * (1. / samps);
+                        r = r + radiance(Ray(cam.o + d * 140, d.norm()), 0, Xi) * (1.0 / samps);
 
                     } // camera rays are pushed ^^^^^ forward to start in interior
 
-                    c[i] = c[i] + Vec(clamp(r.x),clamp(r.y),clamp(r.z))*.25;
+                    c[i] = c[i] + Vec(clamp(r.x), clamp(r.y), clamp(r.z)) * 0.25;
                 }
             }
         }
