@@ -21,20 +21,14 @@ struct Vec {
 	Vec operator%(Vec& b) {return Vec(y * b.z - z * b.y, z * b.x - x * b.z, x * b.y - y * b.x); }
 };
 
-
-
 struct Ray {
 	Vec o, d;
 	Ray(Vec o_, Vec d_) : o(o_), d(d_) {}
 };
 
-
-
 enum Refl_t {
 	DIFFUSE, SPECULAR, REFRACTIVE
 };
-
-
 
 struct Sphere {
 
@@ -62,8 +56,6 @@ struct Sphere {
 
 };
 
-
-
 // scene: radius, position, emission, colour, material
 Sphere spheres[] = {
 
@@ -77,13 +69,11 @@ Sphere spheres[] = {
 
 	// balls
 	Sphere(16.5,Vec(27,16.5,47),Vec(),Vec(1,1,1)*.999, SPECULAR),
-	Sphere(16.5,Vec(73,16.5,78),Vec(),Vec(1,1,1)*.999, REFRACTIVE),
+	Sphere(16.5,Vec(73,16.5,78),Vec(),Vec(1,1,1)*.999, SPECULAR),
 
 	// light
 	Sphere(1.5, Vec(50,81.6-16.5,81.6),Vec(4,4,4)*100,Vec(), DIFFUSE),
 };
-
-
 
 // global variables
 int numSpheres = sizeof(spheres) / sizeof(Sphere);
@@ -104,68 +94,86 @@ inline bool intersect(const Ray& r, double& t, int& id) {
 
 
 
+
+
 // shade
 Vec radiance(const Ray& r, int depth, unsigned short* Xi, int E = 1) {
 
-	// distance to intersection
-	double t;
+	// hit info
+	double t; // distance to intersection
+	int id = 0; // id of intersected object
+	if (!intersect(r, t, id)) return Vec(); // if miss return black
+	const Sphere& obj = spheres[id]; // the hit object
 
-	// id of intersected object
-	int id = 0;
+	// surface properties
+	Vec x = r.o + r.d * t; // ray intersection point
+	Vec n = (x - obj.position).norm(); // sphere normal
+	Vec nl = n.dot(r.d) < 0 ? n : n * -1; // properly oriented surface normal
+	Vec f = obj.colour; // object colour, BRDF modulator
 
-	// if miss return black
-	if (!intersect(r, t, id)) return Vec();
 
-	// the hit object
-	const Sphere& obj = spheres[id];
 
-	// stuff ...
-	Vec x = r.o + r.d * t;
-	Vec n = (x - obj.position).norm();
-	Vec nl = n.dot(r.d) < 0 ? n : n * -1;
-	Vec f = obj.colour;
-
-	// max refl
+	// max reflection using russian roulette
 	double p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;
 	if (++depth > 5 || !p) {
 		if (erand48(Xi) < p) f = f * (1 / p);
 		else return obj.emission * E;
 	}
 
+
+
 	// ideal diffuse reflection
 	if (obj.refl == DIFFUSE) {
-		double r1=2*M_PI*erand48(Xi), r2=erand48(Xi), r2s=sqrt(r2);
-		Vec w=nl, u=((fabs(w.x)>.1?Vec(0,1):Vec(1))%w).norm(), v=w%u;
-		Vec d = (u*cos(r1)*r2s + v*sin(r1)*r2s + w*sqrt(1-r2)).norm();
 
-		// loop over any lights
+		// importance sampling with cosine, orthonormal basis transformation
+		double r1 = 2 * M_PI * erand48(Xi); // angle around
+		double r2 = erand48(Xi), r2s = sqrt(r2); // distance from centre
+		Vec w = nl; // w = normal
+		Vec u = ((fabs(w.x) > 0.1 ? Vec(0,1) : Vec(1)) % w).norm(); // u is perp to w
+		Vec v = w % u; // v is perp to w and u
+		Vec d = (u * cos(r1) * r2s + v * sin(r1) * r2s + w * sqrt(1 - r2)).norm(); // random reflected ray
+
+		// loop over explicit lights
 		Vec e;
-		for (int i=0; i<numSpheres; i++){
-			const Sphere &s = spheres[i];
-			if (s.emission.x<=0 && s.emission.y<=0 && s.emission.z<=0) continue; // skip non-lights
+		for (int i = 0; i < numSpheres; i++) {
 
-			Vec sw=s.position-x, su=((fabs(sw.x)>.1?Vec(0,1):Vec(1))%sw).norm(), sv=sw%su;
-			double cos_a_max = sqrt(1-s.radius*s.radius/(x-s.position).dot(x-s.position));
+			// skip non-lights
+			const Sphere& s = spheres[i];
+			if (s.emission.x <= 0 && s.emission.y <= 0 && s.emission.z <= 0) continue;
+
+			// generate random direction towards light spheres, sampling a point on each light source
+			Vec sw = s.position - x;
+			Vec su = ((fabs(sw.x) > 0.1 ? Vec(0, 1) : Vec(1)) % sw).norm();
+			Vec sv = sw % su;
+			double cos_a_max = sqrt(1 - s.radius * s.radius / (x - s.position).dot(x - s.position));
 			double eps1 = erand48(Xi), eps2 = erand48(Xi);
-			double cos_a = 1-eps1+eps1*cos_a_max;
-			double sin_a = sqrt(1-cos_a*cos_a);
-			double phi = 2*M_PI*eps2;
-			Vec l = su*cos(phi)*sin_a + sv*sin(phi)*sin_a + sw*cos_a;
+			double cos_a = 1 - eps1 + eps1 * cos_a_max;
+			double sin_a = sqrt(1 - cos_a * cos_a);
+			double phi = 2 * M_PI * eps2;
+			Vec l = su * cos(phi) * sin_a + sv * sin(phi) * sin_a + sw * cos_a;
 			l.norm();
-			if (intersect(Ray(x,l), t, id) && id==i){  // shadow ray
-			double omega = 2*M_PI*(1-cos_a_max);
-			e = e + f.mult(s.emission*l.dot(nl)*omega)*M_1_PI;  // 1/pi for brdf
+
+			// trace shadow ray, check if the connection is not blocked
+			if (intersect(Ray(x, l), t, id) && id == i) {
+				double omega = 2 * M_PI * (1 - cos_a_max);
+				e = e + f.mult(s.emission * l.dot(nl) * omega) * M_1_PI;  // 1 / pi for brdf
 			}
 		}
-		return obj.emission*E+e+f.mult(radiance(Ray(x,d),depth,Xi,0));
+
+		// recursive call of light transport equation
+		return obj.emission * E + e + f.mult(radiance(Ray(x, d), depth, Xi, 0));
 	}
+
+
 
 	// ideal specular reflection
 	if (obj.refl == SPECULAR) {
-		return obj.emission + f.mult(radiance(Ray(x,r.d-n*2*n.dot(r.d)),depth,Xi));
+		return obj.emission + f.mult(radiance(Ray(x, r.d - n * 2 * n.dot(r.d)), depth, Xi));
 	}
 
-	// ideal dielectric refraction
+
+
+	/* // ideal dielectric refraction
 	Ray reflRay(x, r.d-n*2*n.dot(r.d));
 	bool into = n.dot(nl)>0;                // Ray from outside going in?
 	double nc=1, nt=1.5, nnt=into?nc/nt:nt/nc, ddn=r.d.dot(nl), cos2t;
@@ -179,8 +187,11 @@ Vec radiance(const Ray& r, int depth, unsigned short* Xi, int E = 1) {
 	double Re=R0+(1-R0)*c*c*c*c*c,Tr=1-Re,P=.25+.5*Re,RP=Re/P,TP=Tr/(1-P);
 	return obj.emission + f.mult(depth>2 ? (erand48(Xi)<P ?   // Russian roulette
 	radiance(reflRay,depth,Xi)*RP:radiance(Ray(x,tdir),depth,Xi)*TP) :
-	radiance(reflRay,depth,Xi)*Re+radiance(Ray(x,tdir),depth,Xi)*Tr);
+	radiance(reflRay,depth,Xi)*Re+radiance(Ray(x,tdir),depth,Xi)*Tr); */
+
 }
+
+
 
 
 
@@ -198,8 +209,10 @@ int main(int argc, char *argv[]) {
     Vec cx = Vec(w * .5135 / h);
     Vec cy = (cx % cam.d).norm() * .5135;
 
-	// ray colour and image vector
+	// accumulated radiance
     Vec r;
+
+	// final image
     Vec* c = new Vec[w * h];
 
 // OpenMP
@@ -208,12 +221,13 @@ int main(int argc, char *argv[]) {
     // loop over rows
     for (int y = 0; y < h; y++) {
 
-        // output performance
+        // output progress
         fprintf(stderr, "\rRendering (%d spp) %5.2f%%", samps * 4, 100. * y / (h - 1));
 
         // loop over columns
-		unsigned short y3 = y * y * y;
-        for (unsigned short x = 0, Xi[3] = {0, 0, y3}; x < w; x++) {
+		const unsigned short y3 = y * y * y;
+    	unsigned short Xi[3] = {0, 0, y3};
+        for (unsigned short x = 0; x < w; x++) {
 
             // 2x2 subpixel rows
             for (int sy = 0, i = (h - y - 1) * w + x; sy < 2; sy++) {

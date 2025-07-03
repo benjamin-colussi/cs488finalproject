@@ -110,6 +110,7 @@ namespace PCG32 {
 // global constants
 constexpr int MAX_REFLECTION_RECURSION_DEPTH = 4;
 constexpr int MAX_REFRACTION_RECURSION_DEPTH = 4;
+constexpr int MAX_PATH_RECURSION_DEPTH = 4;
 constexpr float REFRACTION_INDEX_AIR = 1.00029f;
 
 // switches
@@ -140,10 +141,10 @@ inline float max_of_3_floats(const float& a, const float& b, const float& c) {
 // image
 class Image {
 
-	public:
+	std::vector<float3> pixels;
+	int width = 0, height = 0;
 
-		std::vector<float3> pixels;
-		int width = 0, height = 0;
+	public:
 
 		void resize(const int newWidth, const int newHeight) {
 			this->pixels.resize(newWidth * newHeight);
@@ -152,22 +153,26 @@ class Image {
 		}
 
 		void clear() {
-			for (int j = 0; j < height; j++) for (int i = 0; i < width; i++) this->pixel(i, j) = float3(0.0f);
+			for (int j = 0; j < height; j++) {
+				for (int i = 0; i < width; i++) {
+					this->pixel(i, j) = float3(0.0f);
+				}
+			}
 		}
 
-		Image(int _width = 0, int _height = 0) {
-			this->resize(_width, _height);
+		explicit Image(const int newWidth = 0, const int newHeight = 0) {
+			this->resize(newWidth, newHeight);
 			this->clear();
 		}
 
 		float3& pixel(const int i, const int j) {
-			return this->pixels[i + j * width]; // can check if Image::valid() but is slow
+			return this->pixels[i + j * width];
 		}
 
 };
 
-// main image buffer to be displayed
-Image FrameBuffer(globalWidth, globalHeight);
+// final image to be computed
+inline Image globalImage(globalWidth, globalHeight);
 
 
 
@@ -201,9 +206,7 @@ enum enumMaterialType {
 	MAT_METAL,
 	MAT_GLASS
 };
-class Material {
-
-	// implement if you so desire ...
+class Material final {
 
 	public:
 
@@ -224,8 +227,8 @@ class Material {
 		int textureWidth = 0;
 		int textureHeight = 0;
 
-		Material() {};
-		virtual ~Material() {};
+		Material() = default;
+		~Material() = default;
 
 		void setReflectance(const float3& c) {
 			if (type == MAT_LAMBERTIAN) {
@@ -305,24 +308,29 @@ class Material {
 
 // ray
 class Ray {
+
 	public:
+
 		float3 o, d;
 		Ray() : o(), d(float3(0.0f, 0.0f, 1.0f)) {}
 		Ray(const float3& o, const float3& d) : o(o), d(d) {}
+
 };
 
 // hit info
 class HitInfo {
-public:
-	float t; // distance
-	float3 P; // location
-	float3 N; // shading normal vector
-	float2 T; // texture coordinate
-	const Material* material; // const pointer to the material of the intersected object
 
-	// added information
-	float3 G; // geometric normal
-	bool front; // hit front or back
+	public:
+
+		float t; // distance
+		float3 P; // location
+		float3 N; // shading normal vector
+		float2 T; // texture coordinate
+		const Material* material; // material of object hit
+
+		float3 G; // geometric normal
+		bool front; // hit front or back
+
 };
 
 // axis-aligned bounding box
@@ -420,7 +428,6 @@ struct Triangle {
 };
 
 // triangle mesh
-static float3 shade(const HitInfo& hit, const float3& viewDir, const int level = 0);
 class TriangleMesh {
 
 	public:
@@ -591,22 +598,6 @@ class TriangleMesh {
 		~TriangleMesh() {
 			materials.clear();
 			triangles.clear();
-		}
-
-		// bruteforce ray tracing (for debugging)
-		bool bruteforceIntersect(HitInfo& result, const Ray& ray, float tMin = 0.0f, float tMax = FLT_MAX) {
-			bool hit = false;
-			HitInfo tempMinHit;
-			result.t = FLT_MAX;
-			for (int i = 0; i < triangles.size(); ++i) {
-				if (raytraceTriangle(tempMinHit, ray, triangles[i], tMin, tMax)) {
-					if (tempMinHit.t < result.t) {
-						hit = true;
-						result = tempMinHit;
-					}
-				}
-			}
-			return hit;
 		}
 
 		// single triangle by default
@@ -1398,12 +1389,12 @@ bool BVH::traverse(HitInfo& minHit, const Ray& ray, int node_id, float tMin, flo
 
 
 
+// forward declaration
+static float3 rayShader(const HitInfo& hit, const float3& viewDir, int level = 0);
+static float3 pathShader(const HitInfo& hit, const float3& viewDir, int level = 0);
+
 // scene definition
 class Scene {
-
-	private:
-
-
 
 	public:
 
@@ -1460,22 +1451,15 @@ class Scene {
 			return hit;
 		}
 
-
-
 		// ray tracing
 		void rayTrace() const {
-			FrameBuffer.clear();
-
-			// loop over all pixels in the image
 			for (int j = 0; j < globalHeight; ++j) {
 				for (int i = 0; i < globalWidth; ++i) {
 					const Ray ray = eyeRay(i, j);
-
-					// intersection with object
-					if (HitInfo hitInfo; intersect(hitInfo, ray) == true) FrameBuffer.pixel(i, j) = shade(hitInfo, -ray.d);
-
-					// no intersection
-					else FrameBuffer.pixel(i, j) = float3(0.0f);
+					if (HitInfo hitInfo; intersect(hitInfo, ray) == true) {
+						globalImage.pixel(i, j) = rayShader(hitInfo, -ray.d);
+					}
+					else globalImage.pixel(i, j) = float3(0.0f);
 				}
 			}
 		}
@@ -1485,15 +1469,62 @@ class Scene {
 
 
 		// path tracing
-		void pathTrace() const {
+		void pathTrace(const int rootStrata) const {
 
+			// division
+			const float invStrata = 1.0f / static_cast<float>(rootStrata * rootStrata);
+			const float strataHeight = 1.0f / static_cast<float>(globalHeight * rootStrata);
+			const float strataWidth = 1.0f / static_cast<float>(globalWidth * rootStrata);
+
+			// compute the camera coordinate system
+			const float3 wDir = normalize(-globalViewDir); // back
+			const float3 uDir = normalize(cross(globalUp, wDir)); // right
+			const float3 vDir = cross(wDir, uDir); // up
+
+			// loop over rows
+			for (int j = 0; j < globalHeight; ++j) {
+
+				// report progress
+				fprintf(stderr, "\rRendering %5.2f%%", 100.0 * j / (globalHeight - 1));
+
+				// loop over columns
+				for (int i = 0; i < globalWidth; ++i) {
+
+					// accumulate shade
+					float3 shade;
+
+					// stratified subpixel sampling
+					for (int y = 0; y < rootStrata; ++y) {
+						for (int x = 0; x < rootStrata; ++x) {
+
+							// generate random jitter
+							const float Randy = PCG32::rand() * strataHeight;
+							const float Randolf = PCG32::rand() * strataWidth;
+
+							// compute coordinate of jittered sample
+							const float v = static_cast<float>(j * rootStrata + y) + Randy;
+							const float u = static_cast<float>(i * rootStrata + x) + Randolf;
+
+							// compute sample location in world space
+							const float imPlaneVPos = v * strataHeight - 0.5f;
+							const float imPlaneUPos = u * strataWidth - 0.5f;
+							const float3 pixelPos = globalEye + globalAspectRatio * globalFilmSize * imPlaneUPos * uDir + globalFilmSize * imPlaneVPos * vDir - globalDistanceToFilm * wDir;
+
+							// trace ray through sample location
+							const Ray r(globalEye, normalize(pixelPos - globalEye));
+							if (HitInfo h; intersect(h, r) == true) shade += pathShader(h, -r.d);
+						}
+					}
+
+					// average over strata samples
+					globalImage.pixel(i, j) = shade * invStrata;
+				}
+			}
 		}
 
-
-
-
-
 };
+
+// global scene object
 static Scene globalScene;
 
 
@@ -1506,8 +1537,8 @@ static Scene globalScene;
 
 
 
-// shader
-static float3 shade(const HitInfo& hit, const float3& viewDir, const int level) {
+// ray tracing shading
+static float3 rayShader(const HitInfo& hit, const float3& viewDir, const int level) {
 
 	// lambertian
 	if (hit.material->type == MAT_LAMBERTIAN) {
@@ -1565,21 +1596,20 @@ static float3 shade(const HitInfo& hit, const float3& viewDir, const int level) 
 	if (hit.material->type == MAT_METAL) {
 
 		// check depth of recursion
-		if (level > MAX_REFLECTION_RECURSION_DEPTH) return float3(0.0f, 0.0f, 0.0f);
+		if (level > MAX_REFLECTION_RECURSION_DEPTH) return float3{0.0f, 0.0f, 0.0f};
 		const int newlevel = level + 1;
 
 		// build reflected ray
 		float3 x = hit.P + Epsilon * hit.G;
 		float3 refl = -2.0f * dot(-viewDir, hit.N) * hit.N + -viewDir;
 		if (dot(refl, hit.G) < 0) refl -= dot(2.0f * refl, hit.G) * hit.G;
-		// if (dot(hit.G, viewDir) * dot(hit.G, refl) < 0) refl -= dot(2.0f * refl, hit.G) * hit.G;
 		Ray r(x, normalize(refl));
 
 		// trace recursive ray
 		HitInfo h;
 		if (globalScene.intersect(h, r)) {
-			if (SWORD_OF_LIGHT_AND_SHADOW == false) return shade(h, -r.d, newlevel);
-			return hit.material->Ks * shade(h, -r.d, newlevel);
+			if (SWORD_OF_LIGHT_AND_SHADOW == false) return rayShader(h, -r.d, newlevel);
+			return hit.material->Ks * rayShader(h, -r.d, newlevel);
 		}
 
 		// hits the void
@@ -1590,7 +1620,7 @@ static float3 shade(const HitInfo& hit, const float3& viewDir, const int level) 
 	if (hit.material->type == MAT_GLASS) {
 
 		// check depth of recursion
-		if (level > MAX_REFRACTION_RECURSION_DEPTH) return float3(0.0f, 0.0f, 0.0f);
+		if (level > MAX_REFRACTION_RECURSION_DEPTH) return float3{0.0f, 0.0f, 0.0f};
 		const int newlevel = level + 1;
 
 		// hit front - air->material - always refract
@@ -1603,7 +1633,7 @@ static float3 shade(const HitInfo& hit, const float3& viewDir, const int level) 
 			float3 x = hit.P - Epsilon * hit.G;
 			Ray r(x, normalize(refr));
 			HitInfo h;
-			if (globalScene.intersect(h, r)) return shade(h, -r.d, newlevel);
+			if (globalScene.intersect(h, r)) return rayShader(h, -r.d, newlevel);
 
 			// hits the void
 			return float3(0.0f);
@@ -1621,7 +1651,7 @@ static float3 shade(const HitInfo& hit, const float3& viewDir, const int level) 
 			float3 x = hit.P - Epsilon * hit.G;
 			Ray r(x, normalize(refl));
 			HitInfo h;
-			if (globalScene.intersect(h, r)) return shade(h, -r.d, newlevel);
+			if (globalScene.intersect(h, r)) return rayShader(h, -r.d, newlevel);
 
 			// hits the void
 			return float3(0.0f);
@@ -1633,13 +1663,72 @@ static float3 shade(const HitInfo& hit, const float3& viewDir, const int level) 
 		float3 x = hit.P + Epsilon * hit.G;
 		Ray r(x, normalize(refr));
 		HitInfo h;
-		if (globalScene.intersect(h, r)) return shade(h, -r.d, newlevel);
+		if (globalScene.intersect(h, r)) return rayShader(h, -r.d, newlevel);
 
 		// hits the void
 		return float3(0.0f);
 	}
 
 	// something went wrong - make it apparent that it is an error
+	return float3{100.0f, 0.0f, 100.0f};
+}
+
+
+
+// path tracing shading
+static float3 pathShader(const HitInfo& hit, const float3& viewDir, const int level) {
+
+
+	// max recursion depth w/ russian roulette to terminate randomly
+	if (level > MAX_PATH_RECURSION_DEPTH) return float3(0.0f);
+	const int nextLevel = level + 1;
+
+	// diffuse hits with random reflection direction
+	if (hit.material->type == MAT_LAMBERTIAN) {
+
+
+		// accumulate shading
+		float3 L = float3(0.0f);
+		float3 brdf, irradiance;
+
+		// loop over all point light sources
+		for (int i = 0; i < globalScene.pointLightSources.size(); i++) {
+
+			// ray from hit to light
+			float3 x = hit.P + Epsilon * hit.G;
+			float3 xi = globalScene.pointLightSources[i]->position - x;
+			Ray r(x, normalize(xi));
+
+			// check for intersection between hit and light
+			HitInfo h;
+			bool shadowhit = globalScene.intersect(h, r);
+			float3 xh = h.P - x;
+
+			// if no hit or hit object behind light source
+			if (shadowhit == false || (shadowhit == true && length2(xi) < length2(xh))) {
+				const float falloff = length2(xi);
+				xi /= sqrtf(falloff);
+				irradiance = float(std::max(0.0f, dot(hit.N, xi)) / (4.0f * PI * falloff)) * globalScene.pointLightSources[i]->wattage;
+				brdf = hit.material->BRDF(xi, viewDir, hit.N);
+				if (hit.material->isTextured) brdf *= hit.material->fetchTexture(hit.T);
+				L += irradiance * brdf;
+			}
+		}
+
+		// return accumulated shading
+		return L;
+	}
+
+	// perfect specular reflection always reflects deterministically
+	else if (hit.material->type == MAT_METAL) {
+		float3 reflDir = 2 * dot(viewDir, hit.N) * hit.N - viewDir;
+		if (dot(reflDir, hit.G) < 0) reflDir -= 2 * dot(reflDir, hit.G) * hit.G;
+		const Ray r(hit.P + Epsilon * hit.G, normalize(reflDir));
+		if (HitInfo h; globalScene.intersect(h, r) == true) return hit.material->Ks * pathShader(h, -r.d, nextLevel);
+		return float3(0.0f);
+	}
+
+	// something went wrong return pink (or fuchsia?)
 	return float3{100.0f, 0.0f, 100.0f};
 }
 
