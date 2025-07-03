@@ -1,16 +1,28 @@
-//==========================
-// CS 488 - FINAL PROJECT
-// (by Benjamin Colussi)
-//==========================
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////   CS 488 - SPRING 2025          ////////////////////////////////////////////////////////////////////////////
+//////////   FINAL PROJECT - GLIMMERVOID   ////////////////////////////////////////////////////////////////////////////
+//////////   by Benjamin Colussi           ////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// incloods
+#include "cs488.h"
 
+// compile using gcc as follows for best performance:
+// g++-15 -std=c++17 -O3 -fopenmp main.cpp -o finalproject
+// run as follows:
+// time ./finalproject ./media/cornellbox.obj 4
+
+/* notes:
+$ g++ -std=c++17 -Wall main.cpp -o finalproject
+$ type g++
+>> g++ is hashed (/usr/bin/g++) // uses clang
+$ type g++-15
+>> g++-15 is hashed (/usr/local/bin/g++-15) // uses gcc
+*/
 
 // utilities
-#include "cs488.h"
 inline float clamp(const float x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
 inline int toInt(const float x) { return static_cast<int>(clamp(x) * 255); }
-
-
 
 // global variables
 static TriangleMesh mesh;
@@ -19,7 +31,7 @@ static PointLightSource light;
 
 
 // main renderer
-int main(int argc, const char* argv[]) {
+int main(const int argc, const char* argv[]) {
 
     // .ppm file path
     std::string filename = "no-object.ppm";

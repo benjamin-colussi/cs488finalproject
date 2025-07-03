@@ -215,8 +215,7 @@ int main(int argc, char *argv[]) {
 	// final image
     Vec* c = new Vec[w * h];
 
-// OpenMP
-#pragma omp parallel for schedule(dynamic, 1) private(r)
+
 
     // loop over rows
     for (int y = 0; y < h; y++) {
