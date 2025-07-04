@@ -24,7 +24,7 @@ constexpr float PI = 3.14159265358979f;
 constexpr float DegToRad = PI / 180.0f;
 constexpr float RadToDeg = 180.0f / PI;
 constexpr float Epsilon = 5e-5f;
-constexpr float REFRACTION_INDEX_AIR = 1.00029f;
+constexpr float Refr_Ind_Air = 1.00029f;
 
 // window size and resolution
 constexpr int globalWidth = 512;
@@ -1569,7 +1569,7 @@ static float3 rayShader(const HitInfo& hit, const float3& viewDir, const int lev
 
 		// hit front - air->material - always refract
 		if (hit.front == true) {
-			float ri = REFRACTION_INDEX_AIR / hit.material->eta;
+			float ri = Refr_Ind_Air / hit.material->eta;
 			float dp = dot(-viewDir, hit.N);
 			float rad = 1.0f - ri * ri * (1.0f - dp * dp);
 			float3 refr = ri * (-viewDir - dp * hit.N) - sqrtf(rad) * hit.N;
@@ -1584,7 +1584,7 @@ static float3 rayShader(const HitInfo& hit, const float3& viewDir, const int lev
 		}
 
 		// hit back - material->air
-		float ri = hit.material->eta / REFRACTION_INDEX_AIR;
+		float ri = hit.material->eta / Refr_Ind_Air;
 		float dp = dot(-viewDir, hit.N);
 		float rad = 1.0f - ri * ri * (1.0f - dp * dp);
 
