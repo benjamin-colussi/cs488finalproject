@@ -13,6 +13,8 @@
 * we r rly flyin now
 
 ## To do:
+* implement area lighting as spheres
+* fix geometric normal calculations in triangle intersect
 * unidirectional path tracing
 * set up static scene with atmosphere and moons
 * atmospheric scattering
@@ -25,3 +27,8 @@
 
 ## Extensions:
 * photon mapping
+
+
+
+## Questions:
+* for path tracing, when we write the LTE as an integral over paths, do we still generate random direction rays? or should we be sampling from all the objects in scene?

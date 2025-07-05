@@ -24,12 +24,6 @@ $ type g++-15
 inline float clamp(const float x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
 inline int toInt(const float x) { return static_cast<int>(clamp(x) * 255); }
 
-// global variables
-static TriangleMesh mesh;
-static PointLightSource light;
-
-
-
 // main renderer
 int main(const int argc, const char* argv[]) {
 
@@ -37,6 +31,7 @@ int main(const int argc, const char* argv[]) {
     std::string filename = "no-object.ppm";
 
     // load .obj on command line
+    TriangleMesh mesh;
     if (argc > 1) {
         bool objLoadSucceed = mesh.load(argv[1]);
         if (!objLoadSucceed) {
@@ -57,9 +52,11 @@ int main(const int argc, const char* argv[]) {
     globalScene.addObject(&mesh);
 
     // set up lighting
-    light.position = float3(3.0f, 3.0f, 3.0f);
-    light.wattage = float3(1000.0f, 1000.0f, 1000.0f);
-    globalScene.addPointLightSource(&light);
+    // PointLightSource pointLightSource;
+    // light.position = float3(3.0f, 3.0f, 3.0f);
+    // light.wattage = float3(1000.0f, 1000.0f, 1000.0f);
+    SphericalLightSource sphericalLightSource;
+    globalScene.addSphericalLightSource(&sphericalLightSource);
 
     // scene calculations
     globalScene.preCalc();

@@ -114,7 +114,10 @@ Vec radiance(const Ray& r, int depth, unsigned short* Xi, int E = 1) {
 
 
 	// max reflection using russian roulette
-	double p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;
+	double p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z; // takes max value
+	// if p = 0.0 then p evaluates to false
+	// if p != 0.0 then p evaluates to true
+	// so this if statement only executes if p = 0.0
 	if (++depth > 5 || !p) {
 		if (erand48(Xi) < p) f = f * (1 / p);
 		else return obj.emission * E;
@@ -264,4 +267,130 @@ int main(int argc, char *argv[]) {
         fprintf(f, "%d %d %d ", toInt(c[i].x), toInt(c[i].y), toInt(c[i].z));
     }
 
+}
+
+
+
+
+
+
+
+
+
+// pbrt
+
+
+
+
+
+// SimplePathIntegrator Method Definitions
+SimplePathIntegrator::SimplePathIntegrator(int maxDepth, bool sampleLights,
+                                           bool sampleBSDF, Camera camera,
+                                           Sampler sampler, Primitive aggregate,
+                                           std::vector<Light> lights)
+    : RayIntegrator(camera, sampler, aggregate, lights),
+      maxDepth(maxDepth),
+      sampleLights(sampleLights),
+      sampleBSDF(sampleBSDF),
+      lightSampler(lights, Allocator()) {}
+
+
+
+
+
+SampledSpectrum SimplePathIntegrator::Li(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler, ScratchBuffer &scratchBuffer, VisibleSurface *) const {
+
+
+    // Estimate radiance along ray using simple path tracing
+    SampledSpectrum L(0.f), beta(1.f);
+    bool specularBounce = true;
+    int depth = 0;
+
+
+    while (beta) {
+
+
+        // Find next _SimplePathIntegrator_ vertex and accumulate contribution
+        // Intersect _ray_ with scene
+        pstd::optional<ShapeIntersection> si = Intersect(ray);
+
+
+        // End path if maximum depth reached
+        if (depth++ == maxDepth)
+            break;
+
+
+        // Get BSDF and skip over medium boundaries
+        BSDF bsdf = isect.GetBSDF(ray, lambda, camera, scratchBuffer, sampler);
+        if (!bsdf) {
+            specularBounce = true;
+            isect.SkipIntersection(&ray, si->tHit);
+            continue;
+        }
+
+
+        // Sample direct illumination if _sampleLights_ is true
+        Vector3f wo = -ray.d;
+        if (sampleLights) {
+            pstd::optional<SampledLight> sampledLight = lightSampler.Sample(sampler.Get1D());
+            if (sampledLight) {
+
+                // Sample point on _sampledLight_ to estimate direct illumination
+                Point2f uLight = sampler.Get2D();
+                pstd::optional<LightLiSample> ls = sampledLight->light.SampleLi(isect, uLight, lambda);
+
+                if (ls && ls->L && ls->pdf > 0) {
+
+                    // Evaluate BSDF for light and possibly add scattered radiance
+                    Vector3f wi = ls->wi;
+                    SampledSpectrum f = bsdf.f(wo, wi) * AbsDot(wi, isect.shading.n);
+                    if (f && Unoccluded(isect, ls->pLight)) L += beta * f * ls->L / (sampledLight->p * ls->pdf);
+                }
+            }
+        }
+
+
+        // Sample outgoing direction at intersection to continue path
+        if (sampleBSDF) {
+            // Sample BSDF for new path direction
+            Float u = sampler.Get1D();
+            pstd::optional<BSDFSample> bs = bsdf.Sample_f(wo, u, sampler.Get2D());
+            if (!bs)
+                break;
+            beta *= bs->f * AbsDot(bs->wi, isect.shading.n) / bs->pdf;
+            specularBounce = bs->IsSpecular();
+            ray = isect.SpawnRay(bs->wi);
+
+        }
+
+		else {
+
+            // Uniformly sample sphere or hemisphere to get new path direction
+            Float pdf;
+            Vector3f wi;
+            BxDFFlags flags = bsdf.Flags();
+            if (IsReflective(flags) && IsTransmissive(flags)) {
+                wi = SampleUniformSphere(sampler.Get2D());
+                pdf = UniformSpherePDF();
+            } else {
+                wi = SampleUniformHemisphere(sampler.Get2D());
+                pdf = UniformHemispherePDF();
+                if (IsReflective(flags) && Dot(wo, isect.n) * Dot(wi, isect.n) < 0)
+                    wi = -wi;
+                else if (IsTransmissive(flags) && Dot(wo, isect.n) * Dot(wi, isect.n) > 0)
+                    wi = -wi;
+            }
+            beta *= bsdf.f(wo, wi) * AbsDot(wi, isect.shading.n) / pdf;
+            specularBounce = false;
+            ray = isect.SpawnRay(wi);
+        }
+
+
+        CHECK_GE(beta.y(lambda), 0.f);
+        DCHECK(!IsInf(beta.y(lambda)));
+
+    }
+
+
+    return L;
 }

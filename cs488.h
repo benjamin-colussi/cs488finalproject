@@ -20,9 +20,9 @@ using namespace linalg::aliases;
 #include <vector>
 
 // global constants
-constexpr float PI = 3.14159265358979f;
-constexpr float DegToRad = PI / 180.0f;
-constexpr float RadToDeg = 180.0f / PI;
+constexpr float Pi = 3.14159265358979f;
+constexpr float Deg_To_Rad = Pi / 180.0f;
+constexpr float Rad_To_Deg = 180.0f / Pi;
 constexpr float Epsilon = 5e-5f;
 constexpr float Refr_Ind_Air = 1.00029f;
 
@@ -34,7 +34,7 @@ constexpr int globalHeight = 384;
 constexpr float globalAspectRatio = static_cast<float>(globalWidth) / static_cast<float>(globalHeight);
 constexpr float globalFOV = 45.0f;
 constexpr float globalFilmSize = 0.032f;
-const float globalDistanceToFilm = globalFilmSize / (2.0f * tan(globalFOV * DegToRad * 0.5f));
+const float globalDistanceToFilm = globalFilmSize / (2.0f * tan(globalFOV * Deg_To_Rad * 0.5f));
 
 // dynamic camera parameters
 constexpr float3 globalEye(0.0f, 0.0f, 1.5f);
@@ -59,6 +59,12 @@ namespace PCG32 {
 		return float(double(pcg32_fast()) / 4294967296.0);
 	}
 }
+
+// another one
+#include <random>
+std::random_device rd; // random seed
+std::mt19937 gen(rd()); // mersenne twister engine
+std::normal_distribution<float> std_norm(0.0f, 1.0f);
 
 // switches
 constexpr int MAX_REFLECTION_RECURSION_DEPTH = 4;
@@ -124,8 +130,61 @@ Image globalImage(globalWidth, globalHeight);
 
 // point light source
 class PointLightSource {
-public:
-	float3 position, wattage;
+
+	public:
+
+		float3 position;
+		float3 wattage;
+
+};
+
+// spherical light source
+class SphericalLightSource {
+
+	public:
+
+		float3 centre;
+		float radius;
+		float3 emission;
+		
+		// generate random point on the sphere
+		float3 sample() {
+			float3 Randy = float3(std_norm(gen), std_norm(gen), std_norm(gen));
+			while (dot(Randy, Randy) == 0) Randy = float3(std_norm(gen), std_norm(gen), std_norm(gen));
+			return normalize(Randy) * radius;
+		}
+
+		// check if ray intersects sphere
+		bool intersect(HitInfo& hitInfo, const Ray& ray, float tMin, float tMax) {
+
+			// solve quadratic vector equation
+			float3 oc = centre - ray.o;
+			float b = dot(ray.d, oc);
+			float c = dot(oc, oc) - radius * radius;
+			float discriminant = b * b - c;
+
+			// no intersection
+			if (discriminant < 0) return false;
+
+			// intersection
+			discriminant = sqrtf(discriminant);
+
+			// find minimum t
+			float t = b - discriminant;
+			if (t < tMin || tMax < t) {
+				t = b + discriminant;
+				if (t < tMin || tMax < t) {
+					return false;
+				}
+			}
+
+			// set hit info and return
+			hitInfo.t = t;
+			hitInfo.P = ray.o + hitInfo.t * ray.d;
+			hitInfo.G = normalize(hitInfo.P - centre);
+			return true;
+		}
+
 };
 
 
@@ -195,7 +254,7 @@ class Material final {
 		float3 BRDF(const float3& wi, const float3& wo, const float3& n) const {
 			float3 brdfValue = float3(0.0f);
 			if (type == MAT_LAMBERTIAN) {
-				brdfValue = Kd / PI;
+				brdfValue = Kd / Pi;
 			} else if (type == MAT_METAL) {
 				// empty
 			} else if (type == MAT_GLASS) {
@@ -228,10 +287,10 @@ class Material final {
 			} else if (type == MAT_GLASS) {
 				// empty
 			}
-
 			pdfValue = PDF(wGiven, smp);
 			return smp;
 		}
+
 };
 
 
@@ -1339,6 +1398,7 @@ class Scene {
 		// scene components
 		std::vector<TriangleMesh*> objects;
 		std::vector<PointLightSource*> pointLightSources;
+		std::vector<SphericalLightSource*> sphericalLightSources;
 		std::vector<BVH> bvhs;
 
 		// add object triangle mesh to scene
@@ -1346,6 +1406,9 @@ class Scene {
 
 		// add point light source to scene
 		void addPointLightSource(PointLightSource* pObj) { pointLightSources.push_back(pObj); }
+
+		// add spherical light source to scene
+		void addSphericalLightSource(SphericalLightSource* pObj) { sphericalLightSources.push_back(pObj); }
 
 		// compute BVH
 		void preCalc() {
@@ -1386,6 +1449,14 @@ class Scene {
 					}
 				}
 			}
+			for (int i = 0, i_n = static_cast<int>(sphericalLightSources.size()); i < i_n; ++i) {
+				if (sphericalLightSources[i]->intersect(tempMinHit, ray, tMin, tMax)) {
+					if (tempMinHit.t < minHit.t) {
+						hit = true;
+						minHit = tempMinHit;
+					}
+				}
+			}
 			return hit;
 		}
 
@@ -1401,10 +1472,6 @@ class Scene {
 				}
 			}
 		}
-
-
-
-
 
 		// path tracing
 		void pathTrace(const int rootStrata) const {
@@ -1455,8 +1522,11 @@ class Scene {
 							const float3 pixelPos = globalEye + globalAspectRatio * globalFilmSize * imPlaneUPos * uDir + globalFilmSize * imPlaneVPos * vDir - globalDistanceToFilm * wDir;
 
 							// trace ray through sample location
-							const Ray r(globalEye, normalize(pixelPos - globalEye));
-							if (HitInfo h; intersect(h, r) == true) shade += pathShader(h, -r.d);
+							// under construction ...
+							// const Ray r(globalEye, normalize(pixelPos - globalEye));
+							// if (HitInfo h; intersect(h, r) == true) shade += pathShader(h, -r.d);
+							// shade += pathShader(r);
+							shade += pathShader(Ray(globalEye, normalize(pixelPos - globalEye)));
 						}
 					}
 
@@ -1495,10 +1565,10 @@ static float3 rayShader(const HitInfo& hit, const float3& viewDir, const int lev
 				float3 l = globalScene.pointLightSources[i]->position - hit.P;
 				const float falloff = length2(l);
 				l /= sqrtf(falloff);
-				irradiance = float(std::max(0.0f, dot(hit.N, l)) / (4.0 * PI * falloff)) * globalScene.pointLightSources[i]->wattage;
+				irradiance = float(std::max(0.0f, dot(hit.N, l)) / (4.0 * Pi * falloff)) * globalScene.pointLightSources[i]->wattage;
 				brdf = hit.material->BRDF(l, viewDir, hit.N);
 				if (hit.material->isTextured) brdf *= hit.material->fetchTexture(hit.T);
-				return brdf * PI; //debug output // comment out this line to enable illumination computation
+				return brdf * Pi; //debug output // comment out this line to enable illumination computation
 				L += irradiance * brdf;
 			}
 			return L;
@@ -1525,7 +1595,7 @@ static float3 rayShader(const HitInfo& hit, const float3& viewDir, const int lev
 			if (shadowhit == false || (shadowhit == true && length2(xi) < length2(xh))) {
 				const float falloff = length2(xi);
 				xi /= sqrtf(falloff);
-				irradiance = float(std::max(0.0f, dot(hit.N, xi)) / (4.0f * PI * falloff)) * globalScene.pointLightSources[i]->wattage;
+				irradiance = float(std::max(0.0f, dot(hit.N, xi)) / (4.0f * Pi * falloff)) * globalScene.pointLightSources[i]->wattage;
 				brdf = hit.material->BRDF(xi, viewDir, hit.N);
 				if (hit.material->isTextured) brdf *= hit.material->fetchTexture(hit.T);
 				L += irradiance * brdf;
@@ -1619,21 +1689,154 @@ static float3 rayShader(const HitInfo& hit, const float3& viewDir, const int lev
 
 
 
+
+// rewrite as iterative
+// write area sphere light source
+// sphere intersections
+// redo math and figure out how to sample from lights
+// which should lead to soft shadows
+
+
+
+
 // path tracing shading
-static float3 pathShader(const HitInfo& hit, const float3& viewDir, const int level) {
+static float3 pathShader(Ray ray) {
+
+	// accumulate radiance
+	float3 irradiance(0.0f);
+
+	// trace path(s)
+	int pathLength = 0;
+	while (true) {
 
 
-	// max recursion depth w/ russian roulette to terminate randomly
-	if (level > MAX_PATH_RECURSION_DEPTH) return float3(0.0f);
+		// check intersection
+		HitInfo hitInfo;
+		if (globalScene.intersect(hitInfo, ray) == false) return irradiance;
+		++pathLength;
+
+
+		// russian roulette if path length is greater than specified length
+		// take max value of the new hit material colour to see how much it might contribute
+		if (pathLength > 2) break;
+
+
+		// diffuse reflection
+		if (hitInfo.material->type == MAT_LAMBERTIAN) {
+
+			// next event estimation of direct lighting
+			for (int i = 0, i_n = static_cast<int>(globalScene.sphericalLightSources.size()); i < i_n; ++i) {
+
+				// ray from hit to light
+				float3 hitPoint = hitInfo.P + hitInfo.G * Epsilon;
+				float3 lightPoint = globalScene.sphericalLightSources[i]->sample();
+				float3 hitToLight = lightPoint - hitPoint;
+				Ray shadowRay(hitPoint, normalize(hitToLight));
+
+				HitInfo shadowHitInfo;
+				// add new field to hit info to tell if its a light or nah.. will have to check id of light and etc.
+
+
+
+
+				// check for intersection between hit and light
+				HitInfo h;
+				bool shadowhit = globalScene.intersect(h, r);
+				float3 xh = h.P - x;
+
+				// if no hit or hit object behind light source
+				if (shadowhit == false || (shadowhit == true && length2(xi) < length2(xh))) {
+					const float falloff = length2(xi);
+					xi /= sqrtf(falloff);
+					float3 irradiance = float(std::max(0.0f, dot(hit.N, xi)) / (4.0f * Pi * falloff)) * globalScene.pointLightSources[i]->wattage;
+					float3 brdf = hit.material->BRDF(xi, viewDir, hit.N);
+					if (hit.material->isTextured) brdf *= hit.material->fetchTexture(hit.T);
+					L += irradiance * brdf;
+				}
+
+
+				// these paths are all length = pathLength + 1
+
+				// sample from all ligth sources
+
+				// trace shadow ray to see if we are lit
+
+			}
+
+			// set next ray randomly
+			// if we continue then trace uniform random ray to extend path or using BRDF or whatever
+
+		}
+
+
+		// perfect specular reflection
+		if (hitInfo.material->type == MAT_METAL) {
+
+			// always reflect perfectly across normal
+
+		}
+
+
+	}
+
+
+
+/*
+
+	// russian roulette
+
+	float3 brdf = hit.material->BRDF(xi, viewDir, hit.N);
+
+	float p = std::max()
+
+
+
+
+
 	const int nextLevel = level + 1;
+
+
+	// russian roulette
+	// under construction ...
+	float p = 1.0f;
+	float weight = 1.0f;
+	if (PCG32::rand() < p) weight;
+
+
+
+
+	// Russian Roulette
+	// Randomly terminate a path with a probability inversely equal to the throughput
+	float p = std::max(throughput.x, std::max(throughput.y, throughput.z));
+	if (sampler->NextFloat() > p) {
+		break;
+	}
+
+	// Add the energy we 'lose' by randomly terminating paths
+	throughput *= 1 / p;
+
+
+
+
+	// Possibly terminate the path with Russian roulette
+	SampledSpectrum rrBeta = beta * etaScale;
+	if (rrBeta.MaxComponentValue() < 1 && depth > 1) {
+		Float q = std::max<Float>(0, 1 - rrBeta.MaxComponentValue());
+		if (sampler.Get1D() < q)
+			break;
+		beta /= 1 - q;
+		DCHECK(!IsInf(beta.y(lambda)));
+	}
+
+*/
+
+/*
 
 	// diffuse hits with random reflection direction
 	if (hit.material->type == MAT_LAMBERTIAN) {
 
-
-		// accumulate shading
+		// accumulate shade
 		float3 L = float3(0.0f);
-		float3 brdf, irradiance;
 
 		// loop over all point light sources
 		for (int i = 0; i < globalScene.pointLightSources.size(); i++) {
@@ -1652,14 +1855,20 @@ static float3 pathShader(const HitInfo& hit, const float3& viewDir, const int le
 			if (shadowhit == false || (shadowhit == true && length2(xi) < length2(xh))) {
 				const float falloff = length2(xi);
 				xi /= sqrtf(falloff);
-				irradiance = float(std::max(0.0f, dot(hit.N, xi)) / (4.0f * PI * falloff)) * globalScene.pointLightSources[i]->wattage;
-				brdf = hit.material->BRDF(xi, viewDir, hit.N);
+				float3 irradiance = float(std::max(0.0f, dot(hit.N, xi)) / (4.0f * Pi * falloff)) * globalScene.pointLightSources[i]->wattage;
+				float3 brdf = hit.material->BRDF(xi, viewDir, hit.N);
 				if (hit.material->isTextured) brdf *= hit.material->fetchTexture(hit.T);
 				L += irradiance * brdf;
 			}
 		}
 
-		// return accumulated shading
+		// generate random point on unit sphere
+		float3 Randy = normalize(float3(std_norm(gen), std_norm(gen), std_norm(gen)));
+		if (dot(hit.G, Randy) < 0) Randy *= -1;
+
+		// continue path or return shade
+		const Ray r(hit.P + Epsilon * hit.G, Randy);
+		if (HitInfo h; globalScene.intersect(h, Ray()) == true) return L + pathShader(h, -r.d, nextLevel);
 		return L;
 	}
 
@@ -1674,6 +1883,11 @@ static float3 pathShader(const HitInfo& hit, const float3& viewDir, const int le
 
 	// something went wrong return pink (or fuchsia?)
 	return float3{100.0f, 0.0f, 100.0f};
+
+*/
+
+
+
 }
 
 
