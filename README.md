@@ -12,6 +12,15 @@
 * installed gcc and using compiler optimizations
 * we r rly flyin now
 
+
+
+## Debug:
+* i think i have issues with my area lights
+* should probably implement conic sampling
+* figure out units and make sure i am calculating radiance correctly
+
+
+
 ## To do:
 * implement area lighting as spheres
 * fix geometric normal calculations in triangle intersect

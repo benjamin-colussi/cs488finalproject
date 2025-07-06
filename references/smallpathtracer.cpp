@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <string>
+#include <cmath>
 
 
 
@@ -176,7 +177,7 @@ Vec radiance(const Ray& r, int depth, unsigned short* Xi, int E = 1) {
 
 
 
-	/* // ideal dielectric refraction
+	// ideal dielectric refraction
 	Ray reflRay(x, r.d-n*2*n.dot(r.d));
 	bool into = n.dot(nl)>0;                // Ray from outside going in?
 	double nc=1, nt=1.5, nnt=into?nc/nt:nt/nc, ddn=r.d.dot(nl), cos2t;
@@ -190,8 +191,7 @@ Vec radiance(const Ray& r, int depth, unsigned short* Xi, int E = 1) {
 	double Re=R0+(1-R0)*c*c*c*c*c,Tr=1-Re,P=.25+.5*Re,RP=Re/P,TP=Tr/(1-P);
 	return obj.emission + f.mult(depth>2 ? (erand48(Xi)<P ?   // Russian roulette
 	radiance(reflRay,depth,Xi)*RP:radiance(Ray(x,tdir),depth,Xi)*TP) :
-	radiance(reflRay,depth,Xi)*Re+radiance(Ray(x,tdir),depth,Xi)*Tr); */
-
+	radiance(reflRay,depth,Xi)*Re+radiance(Ray(x,tdir),depth,Xi)*Tr);
 }
 
 
@@ -217,8 +217,6 @@ int main(int argc, char *argv[]) {
 
 	// final image
     Vec* c = new Vec[w * h];
-
-
 
     // loop over rows
     for (int y = 0; y < h; y++) {

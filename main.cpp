@@ -58,9 +58,9 @@ int main(const int argc, const char* argv[]) {
     // light.position = float3(3.0f, 3.0f, 3.0f);
     // light.wattage = float3(1000.0f, 1000.0f, 1000.0f);
     SphericalLightSource sphericalLightSource;
-    sphericalLightSource.centre = float3(3.0f);
-    sphericalLightSource.radius = 0.5f;
-    sphericalLightSource.emission = float3(1000.0f);
+    sphericalLightSource.centre = float3(0.0f, 0.25f, 0.0f);
+    sphericalLightSource.radius = 0.05f;
+    sphericalLightSource.emission = float3(500.0f);
     globalScene.addSphericalLightSource(&sphericalLightSource);
 
     // scene calculations

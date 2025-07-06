@@ -185,7 +185,7 @@ class Material final {
 		float3 BRDF(const float3& wi, const float3& wo, const float3& n) const {
 			float3 brdfValue = float3(0.0f);
 			if (type == MAT_LAMBERTIAN) {
-				brdfValue = Kd / Pi;
+				brdfValue = Kd / (2 * Pi); // uniform hemisphere sampling
 			} else if (type == MAT_METAL) {
 				// empty
 			} else if (type == MAT_GLASS) {
@@ -1405,7 +1405,7 @@ class Scene {
 		// compute BVH
 		void preCalc() {
 			bvhs.resize(objects.size());
-			for (int i = 0; i < objects.size(); ++i) {
+			for (int i = 0, i_n = static_cast<int>(objects.size()); i < i_n; ++i) {
 				objects[i]->preCalc();
 				bvhs[i].build(objects[i]);
 			}
@@ -1554,7 +1554,7 @@ static float3 rayShader(const HitInfo& hit, const float3& viewDir, const int lev
 		if (SWORD_OF_LIGHT_AND_SHADOW == false) {
 			float3 L = float3(0.0f);
 			float3 brdf, irradiance;
-			for (int i = 0; i < globalScene.pointLightSources.size(); i++) {
+			for (int i = 0, i_n = static_cast<int>(globalScene.pointLightSources.size()); i < i_n; i++) {
 				float3 l = globalScene.pointLightSources[i]->position - hit.P;
 				const float falloff = length2(l);
 				l /= sqrtf(falloff);
@@ -1572,7 +1572,7 @@ static float3 rayShader(const HitInfo& hit, const float3& viewDir, const int lev
 		float3 brdf, irradiance;
 
 		// loop over all point light sources
-		for (int i = 0; i < globalScene.pointLightSources.size(); i++) {
+		for (int i = 0, i_n = static_cast<int>(globalScene.pointLightSources.size()); i < i_n; i++) {
 
 			// ray from hit to light
 			float3 x = hit.P + Epsilon * hit.G;
@@ -1685,8 +1685,11 @@ static float3 rayShader(const HitInfo& hit, const float3& viewDir, const int lev
 // path tracing shading
 static float3 pathShader(Ray ray) {
 
-	// accumulate
+	// sampled spectrum
 	float3 L(0.0f);
+
+	// path throughput
+	float beta(1.0f);
 
 	// trace path(s)
 	int pathLength = 0;
@@ -1697,9 +1700,13 @@ static float3 pathShader(Ray ray) {
 		if (globalScene.intersect(hitInfo, ray) == false) return L;
 		++pathLength;
 
-		// russian roulette if path length is greater than specified length
-		// take max value of the new hit material colour to see how much it might contribute
-		if (pathLength > 10) break;
+
+
+		// hit a light
+		// under construction ...
+		if (hitInfo.light == true) {}
+
+
 
 		// diffuse reflection
 		if (hitInfo.material->type == MAT_LAMBERTIAN) {
@@ -1715,16 +1722,16 @@ static float3 pathShader(Ray ray) {
 				// trace shadow ray from hit to light
 				HitInfo shadowHitInfo;
 				Ray shadowRay(hitPoint, normalize(hitToLight));
-				bool shadowHit = globalScene.intersect(shadowHitInfo, shadowRay);
+				globalScene.intersect(shadowHitInfo, shadowRay);
 
 				// calculate irradiance
 				if (shadowHitInfo.light == true) {
 					const float falloff = length2(hitToLight);
 					hitToLight /= sqrtf(falloff);
-					float3 irradiance = float(std::max(0.0f, dot(hitInfo.N, hitToLight)) / (4 * Pi * falloff)) * globalScene.sphericalLightSources[i]->emission;
+					float3 irradiance = std::max(0.0f, dot(hitInfo.N, hitToLight) / (4 * Pi * falloff)) * globalScene.sphericalLightSources[i]->emission;
 					float3 brdf = hitInfo.material->BRDF(hitToLight, -ray.d, hitInfo.N);
 					if (hitInfo.material->isTextured) brdf *= hitInfo.material->fetchTexture(hitInfo.T);
-					L += irradiance * brdf;
+					L += beta * irradiance * brdf;
 				}
 			}
 
@@ -1734,7 +1741,7 @@ static float3 pathShader(Ray ray) {
 			if (dot(hitInfo.G, Randy) < 0) Randy *= -1;
 
 			// continue path
-			ray = Ray(hitInfo.P + hitInfo.G * Epsilon, Randy);
+			ray = Ray(hitInfo.P + hitInfo.G * Epsilon, normalize(Randy));
 		}
 
 
@@ -1751,6 +1758,30 @@ static float3 pathShader(Ray ray) {
 
 		// something went wrong return pink
 		else return float3(100.0f, 0.0f, 100.0f);
+
+
+
+		// break
+		if (pathLength > 5) break;
+
+
+
+		// russian roulette
+		// under construction ...
+		// float3 Birdo = hitInfo.material->BRDF(float3(0.0f), float3(0.0f), float3(0.0f));
+		// float probOfContinuing = std::max(Birdo.x, std::max(Birdo.y, Birdo.z));
+		// if (PCG32::rand() < probOfContinuing) beta /= probOfContinuing;
+		// else continue;
+		// currently makes things a lot brighter ...
+
+
+
+		// update beta
+		// under construction ...
+		beta *= abs(dot(-ray.d, hitInfo.N));
+
+
+
 	}
 
 	// return
@@ -1758,47 +1789,6 @@ static float3 pathShader(Ray ray) {
 
 
 
-/*
-
-	// russian roulette
-
-	float3 brdf = hit.material->BRDF(xi, viewDir, hit.N);
-
-	float p = std::max()
-
-
-	const int nextLevel = level + 1;
-
-
-	// russian roulette
-	// under construction ...
-	float p = 1.0f;
-	float weight = 1.0f;
-	if (PCG32::rand() < p) weight;
-
-
-	// Russian Roulette
-	// Randomly terminate a path with a probability inversely equal to the throughput
-	float p = std::max(throughput.x, std::max(throughput.y, throughput.z));
-	if (sampler->NextFloat() > p) {
-		break;
-	}
-
-	// Add the energy we 'lose' by randomly terminating paths
-	throughput *= 1 / p;
-
-
-	// Possibly terminate the path with Russian roulette
-	SampledSpectrum rrBeta = beta * etaScale;
-	if (rrBeta.MaxComponentValue() < 1 && depth > 1) {
-		Float q = std::max<Float>(0, 1 - rrBeta.MaxComponentValue());
-		if (sampler.Get1D() < q)
-			break;
-		beta /= 1 - q;
-		DCHECK(!IsInf(beta.y(lambda)));
-	}
-
-*/
 
 
 	// // diffuse hits with random reflection direction
@@ -1831,6 +1821,7 @@ static float3 pathShader(Ray ray) {
 	// 		}
 	// 	}
 	// }
+
 
 
 }
