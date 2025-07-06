@@ -128,75 +128,6 @@ Image globalImage(globalWidth, globalHeight);
 
 
 
-// point light source
-class PointLightSource {
-
-	public:
-
-		float3 position;
-		float3 wattage;
-
-};
-
-// spherical light source
-class SphericalLightSource {
-
-	public:
-
-		float3 centre;
-		float radius;
-		float3 emission;
-		
-		// generate random point on the sphere
-		float3 sample() {
-			float3 Randy = float3(std_norm(gen), std_norm(gen), std_norm(gen));
-			while (dot(Randy, Randy) == 0) Randy = float3(std_norm(gen), std_norm(gen), std_norm(gen));
-			return normalize(Randy) * radius;
-		}
-
-		// check if ray intersects sphere
-		bool intersect(HitInfo& hitInfo, const Ray& ray, float tMin, float tMax) {
-
-			// solve quadratic vector equation
-			float3 oc = centre - ray.o;
-			float b = dot(ray.d, oc);
-			float c = dot(oc, oc) - radius * radius;
-			float discriminant = b * b - c;
-
-			// no intersection
-			if (discriminant < 0) return false;
-
-			// intersection
-			discriminant = sqrtf(discriminant);
-
-			// find minimum t
-			float t = b - discriminant;
-			if (t < tMin || tMax < t) {
-				t = b + discriminant;
-				if (t < tMin || tMax < t) {
-					return false;
-				}
-			}
-
-			// set hit info and return
-			hitInfo.t = t;
-			hitInfo.P = ray.o + hitInfo.t * ray.d;
-			hitInfo.G = normalize(hitInfo.P - centre);
-			return true;
-		}
-
-};
-
-
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-
 // uber material
 enum enumMaterialType {
 	MAT_LAMBERTIAN,
@@ -1388,6 +1319,65 @@ bool BVH::traverse(HitInfo& minHit, const Ray& ray, int node_id, float tMin, flo
 
 
 
+// point light source
+class PointLightSource {
+
+	public:
+
+		float3 position;
+		float3 wattage;
+
+};
+
+// spherical light source
+class SphericalLightSource {
+
+	public:
+
+		float3 centre;
+		float radius;
+		float3 emission;
+		
+		// generate random point on the sphere
+		float3 sample() {
+			float3 Randy = float3(std_norm(gen), std_norm(gen), std_norm(gen));
+			while (dot(Randy, Randy) == 0) Randy = float3(std_norm(gen), std_norm(gen), std_norm(gen));
+			return normalize(Randy) * radius;
+		}
+
+		// check if ray intersects sphere
+		bool intersect(HitInfo& hitInfo, const Ray& ray, float tMin, float tMax) {
+
+			// solve quadratic vector equation
+			float3 oc = centre - ray.o;
+			float b = dot(ray.d, oc);
+			float c = dot(oc, oc) - radius * radius;
+			float discriminant = b * b - c;
+
+			// no intersection
+			if (discriminant < 0) return false;
+
+			// intersection
+			discriminant = sqrtf(discriminant);
+
+			// find minimum t
+			float t = b - discriminant;
+			if (t < tMin || tMax < t) {
+				t = b + discriminant;
+				if (t < tMin || tMax < t) {
+					return false;
+				}
+			}
+
+			// set hit info and return
+			hitInfo.t = t;
+			hitInfo.P = ray.o + hitInfo.t * ray.d;
+			hitInfo.G = normalize(hitInfo.P - centre);
+			return true;
+		}
+
+};
+
 // forward declaration
 static float3 rayShader(const HitInfo& hit, const float3& viewDir, int level = 0);
 static float3 pathShader(Ray ray);
@@ -1526,10 +1516,10 @@ class Scene {
 
 							// trace ray through sample location
 							// under construction ...
-							const Ray r(globalEye, normalize(pixelPos - globalEye));
+							// const Ray r(globalEye, normalize(pixelPos - globalEye));
 							// if (HitInfo h; intersect(h, r) == true) shade += pathShader(h, -r.d);
-							shade += pathShader(r);
-							// shade += pathShader(Ray(globalEye, normalize(pixelPos - globalEye)));
+							// shade += pathShader(r);
+							shade += pathShader(Ray(globalEye, normalize(pixelPos - globalEye)));
 						}
 					}
 
@@ -1692,16 +1682,6 @@ static float3 rayShader(const HitInfo& hit, const float3& viewDir, const int lev
 
 
 
-
-// rewrite as iterative
-// write area sphere light source
-// sphere intersections
-// redo math and figure out how to sample from lights
-// which should lead to soft shadows
-
-
-
-
 // path tracing shading
 static float3 pathShader(Ray ray) {
 
@@ -1719,7 +1699,7 @@ static float3 pathShader(Ray ray) {
 
 		// russian roulette if path length is greater than specified length
 		// take max value of the new hit material colour to see how much it might contribute
-		if (pathLength > 3) break;
+		if (pathLength > 10) break;
 
 		// diffuse reflection
 		if (hitInfo.material->type == MAT_LAMBERTIAN) {
@@ -1770,8 +1750,11 @@ static float3 pathShader(Ray ray) {
 		}
 
 		// something went wrong return pink
-		else return float3{100.0f, 0.0f, 100.0f};
+		else return float3(100.0f, 0.0f, 100.0f);
 	}
+
+	// return
+	return L;
 
 
 
