@@ -328,6 +328,8 @@ class HitInfo {
 		float3 G; // geometric normal
 		bool front; // hit front or back
 
+		bool light = false; // hit light
+
 };
 
 // axis-aligned bounding box
@@ -1388,7 +1390,7 @@ bool BVH::traverse(HitInfo& minHit, const Ray& ray, int node_id, float tMin, flo
 
 // forward declaration
 static float3 rayShader(const HitInfo& hit, const float3& viewDir, int level = 0);
-static float3 pathShader(const HitInfo& hit, const float3& viewDir, int level = 0);
+static float3 pathShader(Ray ray);
 
 // scene definition
 class Scene {
@@ -1454,6 +1456,7 @@ class Scene {
 					if (tempMinHit.t < minHit.t) {
 						hit = true;
 						minHit = tempMinHit;
+						minHit.light = true;
 					}
 				}
 			}
@@ -1523,10 +1526,10 @@ class Scene {
 
 							// trace ray through sample location
 							// under construction ...
-							// const Ray r(globalEye, normalize(pixelPos - globalEye));
+							const Ray r(globalEye, normalize(pixelPos - globalEye));
 							// if (HitInfo h; intersect(h, r) == true) shade += pathShader(h, -r.d);
-							// shade += pathShader(r);
-							shade += pathShader(Ray(globalEye, normalize(pixelPos - globalEye)));
+							shade += pathShader(r);
+							// shade += pathShader(Ray(globalEye, normalize(pixelPos - globalEye)));
 						}
 					}
 
@@ -1702,24 +1705,21 @@ static float3 rayShader(const HitInfo& hit, const float3& viewDir, const int lev
 // path tracing shading
 static float3 pathShader(Ray ray) {
 
-	// accumulate radiance
-	float3 irradiance(0.0f);
+	// accumulate
+	float3 L(0.0f);
 
 	// trace path(s)
 	int pathLength = 0;
 	while (true) {
 
-
 		// check intersection
 		HitInfo hitInfo;
-		if (globalScene.intersect(hitInfo, ray) == false) return irradiance;
+		if (globalScene.intersect(hitInfo, ray) == false) return L;
 		++pathLength;
-
 
 		// russian roulette if path length is greater than specified length
 		// take max value of the new hit material colour to see how much it might contribute
-		if (pathLength > 2) break;
-
+		if (pathLength > 3) break;
 
 		// diffuse reflection
 		if (hitInfo.material->type == MAT_LAMBERTIAN) {
@@ -1727,56 +1727,50 @@ static float3 pathShader(Ray ray) {
 			// next event estimation of direct lighting
 			for (int i = 0, i_n = static_cast<int>(globalScene.sphericalLightSources.size()); i < i_n; ++i) {
 
-				// ray from hit to light
+				// calculate vector from hit to light
 				float3 hitPoint = hitInfo.P + hitInfo.G * Epsilon;
 				float3 lightPoint = globalScene.sphericalLightSources[i]->sample();
 				float3 hitToLight = lightPoint - hitPoint;
-				Ray shadowRay(hitPoint, normalize(hitToLight));
 
+				// trace shadow ray from hit to light
 				HitInfo shadowHitInfo;
-				// add new field to hit info to tell if its a light or nah.. will have to check id of light and etc.
+				Ray shadowRay(hitPoint, normalize(hitToLight));
+				bool shadowHit = globalScene.intersect(shadowHitInfo, shadowRay);
 
-
-
-
-				// check for intersection between hit and light
-				HitInfo h;
-				bool shadowhit = globalScene.intersect(h, r);
-				float3 xh = h.P - x;
-
-				// if no hit or hit object behind light source
-				if (shadowhit == false || (shadowhit == true && length2(xi) < length2(xh))) {
-					const float falloff = length2(xi);
-					xi /= sqrtf(falloff);
-					float3 irradiance = float(std::max(0.0f, dot(hit.N, xi)) / (4.0f * Pi * falloff)) * globalScene.pointLightSources[i]->wattage;
-					float3 brdf = hit.material->BRDF(xi, viewDir, hit.N);
-					if (hit.material->isTextured) brdf *= hit.material->fetchTexture(hit.T);
+				// calculate irradiance
+				if (shadowHitInfo.light == true) {
+					const float falloff = length2(hitToLight);
+					hitToLight /= sqrtf(falloff);
+					float3 irradiance = float(std::max(0.0f, dot(hitInfo.N, hitToLight)) / (4 * Pi * falloff)) * globalScene.sphericalLightSources[i]->emission;
+					float3 brdf = hitInfo.material->BRDF(hitToLight, -ray.d, hitInfo.N);
+					if (hitInfo.material->isTextured) brdf *= hitInfo.material->fetchTexture(hitInfo.T);
 					L += irradiance * brdf;
 				}
-
-
-				// these paths are all length = pathLength + 1
-
-				// sample from all ligth sources
-
-				// trace shadow ray to see if we are lit
-
 			}
 
-			// set next ray randomly
-			// if we continue then trace uniform random ray to extend path or using BRDF or whatever
+			// generate random point on unit sphere
+			float3 Randy = float3(std_norm(gen), std_norm(gen), std_norm(gen));
+			while (dot(Randy, Randy) == 0) Randy = float3(std_norm(gen), std_norm(gen), std_norm(gen));
+			if (dot(hitInfo.G, Randy) < 0) Randy *= -1;
 
+			// continue path
+			ray = Ray(hitInfo.P + hitInfo.G * Epsilon, Randy);
 		}
 
 
 		// perfect specular reflection
-		if (hitInfo.material->type == MAT_METAL) {
+		else if (hitInfo.material->type == MAT_METAL) {
 
 			// always reflect perfectly across normal
-
+			float3 reflDir = 2 * dot(-ray.d, hitInfo.N) * hitInfo.N + ray.d;
+			if (dot(reflDir, hitInfo.G) < 0) reflDir -= 2 * dot(reflDir, hitInfo.G) * hitInfo.G;
+			ray = Ray(hitInfo.P + Epsilon * hitInfo.G, normalize(reflDir));
+			
+			// if (HitInfo h; globalScene.intersect(h, r) == true) return hit.material->Ks * pathShader(h, -r.d, nextLevel);
 		}
 
-
+		// something went wrong return pink
+		else return float3{100.0f, 0.0f, 100.0f};
 	}
 
 
@@ -1790,9 +1784,6 @@ static float3 pathShader(Ray ray) {
 	float p = std::max()
 
 
-
-
-
 	const int nextLevel = level + 1;
 
 
@@ -1801,8 +1792,6 @@ static float3 pathShader(Ray ray) {
 	float p = 1.0f;
 	float weight = 1.0f;
 	if (PCG32::rand() < p) weight;
-
-
 
 
 	// Russian Roulette
@@ -1814,8 +1803,6 @@ static float3 pathShader(Ray ray) {
 
 	// Add the energy we 'lose' by randomly terminating paths
 	throughput *= 1 / p;
-
-
 
 
 	// Possibly terminate the path with Russian roulette
@@ -1830,62 +1817,37 @@ static float3 pathShader(Ray ray) {
 
 */
 
-/*
 
-	// diffuse hits with random reflection direction
-	if (hit.material->type == MAT_LAMBERTIAN) {
+	// // diffuse hits with random reflection direction
+	// if (hit.material->type == MAT_LAMBERTIAN) {
 
-		// accumulate shade
-		float3 L = float3(0.0f);
+	// 	// accumulate shade
+	// 	float3 L = float3(0.0f);
 
-		// loop over all point light sources
-		for (int i = 0; i < globalScene.pointLightSources.size(); i++) {
+	// 	// loop over all point light sources
+	// 	for (int i = 0; i < globalScene.pointLightSources.size(); i++) {
 
-			// ray from hit to light
-			float3 x = hit.P + Epsilon * hit.G;
-			float3 xi = globalScene.pointLightSources[i]->position - x;
-			Ray r(x, normalize(xi));
+	// 		// ray from hit to light
+	// 		float3 x = hit.P + Epsilon * hit.G;
+	// 		float3 xi = globalScene.pointLightSources[i]->position - x;
+	// 		Ray r(x, normalize(xi));
 
-			// check for intersection between hit and light
-			HitInfo h;
-			bool shadowhit = globalScene.intersect(h, r);
-			float3 xh = h.P - x;
+	// 		// check for intersection between hit and light
+	// 		HitInfo h;
+	// 		bool shadowhit = globalScene.intersect(h, r);
+	// 		float3 xh = h.P - x;
 
-			// if no hit or hit object behind light source
-			if (shadowhit == false || (shadowhit == true && length2(xi) < length2(xh))) {
-				const float falloff = length2(xi);
-				xi /= sqrtf(falloff);
-				float3 irradiance = float(std::max(0.0f, dot(hit.N, xi)) / (4.0f * Pi * falloff)) * globalScene.pointLightSources[i]->wattage;
-				float3 brdf = hit.material->BRDF(xi, viewDir, hit.N);
-				if (hit.material->isTextured) brdf *= hit.material->fetchTexture(hit.T);
-				L += irradiance * brdf;
-			}
-		}
-
-		// generate random point on unit sphere
-		float3 Randy = normalize(float3(std_norm(gen), std_norm(gen), std_norm(gen)));
-		if (dot(hit.G, Randy) < 0) Randy *= -1;
-
-		// continue path or return shade
-		const Ray r(hit.P + Epsilon * hit.G, Randy);
-		if (HitInfo h; globalScene.intersect(h, Ray()) == true) return L + pathShader(h, -r.d, nextLevel);
-		return L;
-	}
-
-	// perfect specular reflection always reflects deterministically
-	else if (hit.material->type == MAT_METAL) {
-		float3 reflDir = 2 * dot(viewDir, hit.N) * hit.N - viewDir;
-		if (dot(reflDir, hit.G) < 0) reflDir -= 2 * dot(reflDir, hit.G) * hit.G;
-		const Ray r(hit.P + Epsilon * hit.G, normalize(reflDir));
-		if (HitInfo h; globalScene.intersect(h, r) == true) return hit.material->Ks * pathShader(h, -r.d, nextLevel);
-		return float3(0.0f);
-	}
-
-	// something went wrong return pink (or fuchsia?)
-	return float3{100.0f, 0.0f, 100.0f};
-
-*/
-
+	// 		// if no hit or hit object behind light source
+	// 		if (shadowhit == false || (shadowhit == true && length2(xi) < length2(xh))) {
+	// 			const float falloff = length2(xi);
+	// 			xi /= sqrtf(falloff);
+	// 			float3 irradiance = float(std::max(0.0f, dot(hit.N, xi)) / (4.0f * Pi * falloff)) * globalScene.pointLightSources[i]->wattage;
+	// 			float3 brdf = hit.material->BRDF(xi, viewDir, hit.N);
+	// 			if (hit.material->isTextured) brdf *= hit.material->fetchTexture(hit.T);
+	// 			L += irradiance * brdf;
+	// 		}
+	// 	}
+	// }
 
 
 }
