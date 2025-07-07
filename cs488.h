@@ -1685,15 +1685,23 @@ static float3 rayShader(const HitInfo& hit, const float3& viewDir, const int lev
 // path tracing shading
 static float3 pathShader(Ray ray) {
 
-	// sampled spectrum
+
+
+	// accumulate radiance
 	float3 L(0.0f);
+
+
 
 	// path throughput
 	float beta(1.0f);
 
+
+	
 	// trace path(s)
 	int pathLength = 0;
 	while (true) {
+
+
 
 		// check intersection
 		HitInfo hitInfo;
@@ -1704,7 +1712,9 @@ static float3 pathShader(Ray ray) {
 
 		// hit a light
 		// under construction ...
-		if (hitInfo.light == true) {}
+		if (hitInfo.light == true) {
+			break;
+		}
 
 
 
@@ -1745,6 +1755,7 @@ static float3 pathShader(Ray ray) {
 		}
 
 
+
 		// perfect specular reflection
 		else if (hitInfo.material->type == MAT_METAL) {
 
@@ -1755,6 +1766,8 @@ static float3 pathShader(Ray ray) {
 			
 			// if (HitInfo h; globalScene.intersect(h, r) == true) return hit.material->Ks * pathShader(h, -r.d, nextLevel);
 		}
+
+
 
 		// something went wrong return pink
 		else return float3(100.0f, 0.0f, 100.0f);
@@ -1784,46 +1797,10 @@ static float3 pathShader(Ray ray) {
 
 	}
 
-	// return
+
+
+	// return radiance
 	return L;
-
-
-
-
-
-	// // diffuse hits with random reflection direction
-	// if (hit.material->type == MAT_LAMBERTIAN) {
-
-	// 	// accumulate shade
-	// 	float3 L = float3(0.0f);
-
-	// 	// loop over all point light sources
-	// 	for (int i = 0; i < globalScene.pointLightSources.size(); i++) {
-
-	// 		// ray from hit to light
-	// 		float3 x = hit.P + Epsilon * hit.G;
-	// 		float3 xi = globalScene.pointLightSources[i]->position - x;
-	// 		Ray r(x, normalize(xi));
-
-	// 		// check for intersection between hit and light
-	// 		HitInfo h;
-	// 		bool shadowhit = globalScene.intersect(h, r);
-	// 		float3 xh = h.P - x;
-
-	// 		// if no hit or hit object behind light source
-	// 		if (shadowhit == false || (shadowhit == true && length2(xi) < length2(xh))) {
-	// 			const float falloff = length2(xi);
-	// 			xi /= sqrtf(falloff);
-	// 			float3 irradiance = float(std::max(0.0f, dot(hit.N, xi)) / (4.0f * Pi * falloff)) * globalScene.pointLightSources[i]->wattage;
-	// 			float3 brdf = hit.material->BRDF(xi, viewDir, hit.N);
-	// 			if (hit.material->isTextured) brdf *= hit.material->fetchTexture(hit.T);
-	// 			L += irradiance * brdf;
-	// 		}
-	// 	}
-	// }
-
-
-
 }
 
 
