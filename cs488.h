@@ -21,6 +21,9 @@ using namespace linalg::aliases;
 
 // global constants
 constexpr float Pi = 3.14159265358979f;
+constexpr float Pi_Inv = 1.0f / Pi;
+constexpr float Pi_2_Inv = 1.0f / (2.0f * Pi);
+constexpr float Pi_4_Inv = 1.0f / (4.0f * Pi);
 constexpr float Deg_To_Rad = Pi / 180.0f;
 constexpr float Rad_To_Deg = 180.0f / Pi;
 constexpr float Epsilon = 5e-5f;
@@ -60,16 +63,18 @@ namespace PCG32 {
 	}
 }
 
-// another one
+// random normal generator
 #include <random>
+constexpr float mu = 0.0f;
+constexpr float sigma = 1.0f;
 std::random_device rd; // random seed
 std::mt19937 gen(rd()); // mersenne twister engine
-std::normal_distribution<float> std_norm(0.0f, 1.0f);
+std::normal_distribution<float> std_norm(mu, sigma);
 
 // switches
 constexpr int MAX_REFLECTION_RECURSION_DEPTH = 4;
 constexpr int MAX_REFRACTION_RECURSION_DEPTH = 4;
-constexpr int MAX_PATH_RECURSION_DEPTH = 4;
+constexpr int MAXIMUM_PATH_LENGTH = 4;
 constexpr bool SWORD_OF_LIGHT_AND_SHADOW = true;
 
 
@@ -128,22 +133,24 @@ Image globalImage(globalWidth, globalHeight);
 
 
 
-// uber material
-enum enumMaterialType {
+// material type
+enum MaterialType {
 	MAT_LAMBERTIAN,
 	MAT_METAL,
-	MAT_GLASS
+	MAT_GLASS,
+	MAT_LIGHT
 };
-class Material final {
+
+// uber material
+class Material {
 
 	public:
 
+		// fields
 		std::string name;
-
-		enumMaterialType type = MAT_LAMBERTIAN;
+		MaterialType type = MAT_LAMBERTIAN;
 		float eta = 1.0f; // index of refraction
-		float glossiness = 1.0f;
-
+		float glossiness = 1.0f; // glossiness
 		float3 Ka = float3(0.0f); // ambient colour
 		float3 Kd = float3(0.9f); // diffuse colour
 		float3 Ks = float3(0.0f); // specular colour
@@ -155,26 +162,25 @@ class Material final {
 		int textureWidth = 0;
 		int textureHeight = 0;
 
+		// functions
 		Material() = default;
 		~Material() = default;
-
 		void setReflectance(const float3& c) {
 			if (type == MAT_LAMBERTIAN) {
 				Kd = c;
-			} else if (type == MAT_METAL) {
+			}
+			else if (type == MAT_METAL) {
 				// empty
-			} else if (type == MAT_GLASS) {
+			}
+			else if (type == MAT_GLASS) {
 				// empty
 			}
 		}
-
 		float3 fetchTexture(const float2& tex) const {
-			// repeating
 			int x = int(tex.x * textureWidth) % textureWidth;
 			int y = int(tex.y * textureHeight) % textureHeight;
 			if (x < 0) x += textureWidth;
 			if (y < 0) y += textureHeight;
-
 			int pix = (x + y * textureWidth) * 3;
 			const unsigned char r = texture[pix + 0];
 			const unsigned char g = texture[pix + 1];
@@ -182,44 +188,44 @@ class Material final {
 			return float3(r, g, b) / 255.0f;
 		}
 
-		float3 BRDF(const float3& wi, const float3& wo, const float3& n) const {
-			float3 brdfValue = float3(0.0f);
-			if (type == MAT_LAMBERTIAN) {
-				brdfValue = Kd / (2 * Pi); // uniform hemisphere sampling
-			} else if (type == MAT_METAL) {
-				// empty
-			} else if (type == MAT_GLASS) {
-				// empty
-			}
-			return brdfValue;
-		};
 
-		float PDF(const float3& wGiven, const float3& wSample) const {
-			// probability density function for a given direction and a given sample
-			// it has to be consistent with the sampler
-			float pdfValue = 0.0f;
+
+		// sample the spectrum of the material
+		float3 spectrum(const float3& wo, const float3& wi, const float3& n) const {
 			if (type == MAT_LAMBERTIAN) {
-				// empty
-			} else if (type == MAT_METAL) {
-				// empty
-			} else if (type == MAT_GLASS) {
-				// empty
+				return Kd * Pi_Inv;
 			}
-			return pdfValue;
+			return float3(0.0f);
 		}
 
-		float3 sampler(const float3& wGiven, float& pdfValue) const {
-			// sample a vector and record its probability density as pdfValue
-			float3 smp = float3(0.0f);
+
+
+		// pdf given direction and sample must be consistent with sampler
+		float pdf(const float3& wo, const float3& wi) const {
 			if (type == MAT_LAMBERTIAN) {
-				// empty
-			} else if (type == MAT_METAL) {
-				// empty
-			} else if (type == MAT_GLASS) {
-				// empty
+				return Pi_2_Inv;
+				// cos(theta) * Pi_Inv
 			}
-			pdfValue = PDF(wGiven, smp);
-			return smp;
+			return 0.0f;
+		}
+
+
+
+		// sample a vector and record its probability density as pdfValue
+		float3 sample(const float3& wo, const float3& n) const {
+			if (type == MAT_LAMBERTIAN) {
+				float3 Randy = float3(std_norm(gen), std_norm(gen), std_norm(gen));
+				while (Randy.x == 0 && Randy.y == 0 && Randy.z == 0) Randy = float3(std_norm(gen), std_norm(gen), std_norm(gen));
+				Randy = normalize(Randy);
+				if (dot(n, Randy) < 0) Randy *= -1;
+				return Randy;
+				// <<Sample cosine-weighted hemisphere to compute wi and pdf>> 
+              	// Vector3f wi = SampleCosineHemisphere(u);
+              	// if (wo.z < 0) wi.z *= -1;
+              	// Float pdf = CosineHemispherePDF(AbsCosTheta(wi));
+				// return BSDFSample(R * InvPi, wi, pdf, BxDFFlags::DiffuseReflection);
+			}
+			return float3(0.0f);
 		}
 
 };
@@ -1337,6 +1343,7 @@ class SphericalLightSource {
 		float3 centre;
 		float radius;
 		float3 emission;
+		Material material;
 		
 		// generate random point on the sphere
 		float3 sample() {
@@ -1372,6 +1379,7 @@ class SphericalLightSource {
 			// set hit info and return
 			hitInfo.t = t;
 			hitInfo.P = ray.o + hitInfo.t * ray.d;
+			hitInfo.material = &material;
 			hitInfo.G = normalize(hitInfo.P - centre);
 			return true;
 		}
@@ -1559,7 +1567,7 @@ static float3 rayShader(const HitInfo& hit, const float3& viewDir, const int lev
 				const float falloff = length2(l);
 				l /= sqrtf(falloff);
 				irradiance = float(std::max(0.0f, dot(hit.N, l)) / (4.0 * Pi * falloff)) * globalScene.pointLightSources[i]->wattage;
-				brdf = hit.material->BRDF(l, viewDir, hit.N);
+				brdf = hit.material->spectrum(viewDir, l, hit.N);
 				if (hit.material->isTextured) brdf *= hit.material->fetchTexture(hit.T);
 				return brdf * Pi; //debug output // comment out this line to enable illumination computation
 				L += irradiance * brdf;
@@ -1589,7 +1597,7 @@ static float3 rayShader(const HitInfo& hit, const float3& viewDir, const int lev
 				const float falloff = length2(xi);
 				xi /= sqrtf(falloff);
 				irradiance = float(std::max(0.0f, dot(hit.N, xi)) / (4.0f * Pi * falloff)) * globalScene.pointLightSources[i]->wattage;
-				brdf = hit.material->BRDF(xi, viewDir, hit.N);
+				brdf = hit.material->spectrum(viewDir, xi, hit.N);
 				if (hit.material->isTextured) brdf *= hit.material->fetchTexture(hit.T);
 				L += irradiance * brdf;
 			}
@@ -1687,39 +1695,68 @@ static float3 pathShader(Ray ray) {
 
 
 
-	// accumulate radiance
-	float3 L(0.0f);
-
-
-
-	// path throughput
-	float beta(1.0f);
-
+	// maybe call the incoming ray "wi" for consistency ???
+	// add filter to ray shooter
+	// is it possible to add the path twice? since everything is random?
 
 	
+
+	// throughput, radiance
+	float3 beta(1.0f), L(0.0f);
+
+	// hit a mirror
+	bool specularBounce = false;
+
 	// trace path(s)
 	int pathLength = 0;
 	while (true) {
 
-
-
 		// check intersection
 		HitInfo hitInfo;
 		if (globalScene.intersect(hitInfo, ray) == false) return L;
+		const float3 wo = -ray.d;
 		++pathLength;
 
 
 
 		// hit a light
 		// under construction ...
-		if (hitInfo.light == true) {
+		// gonna have to add emission to material and get a pdf for light sampling and move sample to material
+		if (hitInfo.material->type == MAT_LIGHT) {
+
+			if (pathLength == 1 || specularBounce == true) {
+				L += (beta * globalScene.sphericalLightSources[0]->emission * Pi_4_Inv / (hitInfo.t * hitInfo.t));
+				// divide by pdf?
+			}
+
 			break;
+
+
+
+
+
 		}
+
+		// Incorporate emission from surface hit by ray
+        // SampledSpectrum Le = si->intr.Le(-ray.d, lambda);
+        // if (Le) {
+        //     if (depth == 0 || specularBounce)
+        //         L += beta * Le;
+        //     else {
+        //         // Compute MIS weight for area light
+        //         Light areaLight(si->intr.areaLight);
+        //         Float p_l = lightSampler.PMF(prevIntrCtx, areaLight) *
+        //                     areaLight.PDF_Li(prevIntrCtx, ray.d, true);
+        //         Float w_l = PowerHeuristic(1, p_b, 1, p_l);
+
+        //         L += beta * w_l * Le;
+        //     }
+        // }
 
 
 
 		// diffuse reflection
-		if (hitInfo.material->type == MAT_LAMBERTIAN) {
+		else if (hitInfo.material->type == MAT_LAMBERTIAN) {
 
 			// next event estimation of direct lighting
 			for (int i = 0, i_n = static_cast<int>(globalScene.sphericalLightSources.size()); i < i_n; ++i) {
@@ -1736,68 +1773,42 @@ static float3 pathShader(Ray ray) {
 
 				// calculate irradiance
 				if (shadowHitInfo.light == true) {
-					const float falloff = length2(hitToLight);
-					hitToLight /= sqrtf(falloff);
-					float3 irradiance = std::max(0.0f, dot(hitInfo.N, hitToLight) / (4 * Pi * falloff)) * globalScene.sphericalLightSources[i]->emission;
-					float3 brdf = hitInfo.material->BRDF(hitToLight, -ray.d, hitInfo.N);
-					if (hitInfo.material->isTextured) brdf *= hitInfo.material->fetchTexture(hitInfo.T);
-					L += beta * irradiance * brdf;
+					const float falloffInv = 1 / dot(hitToLight, hitToLight);
+					hitToLight *= sqrtf(falloffInv);
+					const float3 irradiance = globalScene.sphericalLightSources[i]->emission * Pi_4_Inv * falloffInv;
+					const float3 numerator = beta * hitInfo.material->spectrum(wo, hitToLight, hitInfo.N) * abs(dot(hitToLight, hitInfo.N)) * irradiance;
+					L += numerator / hitInfo.material->pdf(wo, hitToLight);
 				}
 			}
 
-			// generate random point on unit sphere
-			float3 Randy = float3(std_norm(gen), std_norm(gen), std_norm(gen));
-			while (dot(Randy, Randy) == 0) Randy = float3(std_norm(gen), std_norm(gen), std_norm(gen));
-			if (dot(hitInfo.G, Randy) < 0) Randy *= -1;
-
 			// continue path
-			ray = Ray(hitInfo.P + hitInfo.G * Epsilon, normalize(Randy));
+			ray = Ray(hitInfo.P + hitInfo.G * Epsilon, hitInfo.material->sample(-ray.d, hitInfo.N));
 		}
 
 
 
-		// perfect specular reflection
+		// specular bounce
+		// under construction ...
 		else if (hitInfo.material->type == MAT_METAL) {
+			specularBounce = true;
 
-			// always reflect perfectly across normal
-			float3 reflDir = 2 * dot(-ray.d, hitInfo.N) * hitInfo.N + ray.d;
-			if (dot(reflDir, hitInfo.G) < 0) reflDir -= 2 * dot(reflDir, hitInfo.G) * hitInfo.G;
-			ray = Ray(hitInfo.P + Epsilon * hitInfo.G, normalize(reflDir));
-			
-			// if (HitInfo h; globalScene.intersect(h, r) == true) return hit.material->Ks * pathShader(h, -r.d, nextLevel);
+			// generate perfectly reflected ray
+			// implement in material class
 		}
-
-
-
-		// something went wrong return pink
-		else return float3(100.0f, 0.0f, 100.0f);
-
-
-
-		// break
-		if (pathLength > 5) break;
 
 
 
 		// russian roulette
-		// under construction ...
-		// float3 Birdo = hitInfo.material->BRDF(float3(0.0f), float3(0.0f), float3(0.0f));
-		// float probOfContinuing = std::max(Birdo.x, std::max(Birdo.y, Birdo.z));
-		// if (PCG32::rand() < probOfContinuing) beta /= probOfContinuing;
-		// else continue;
-		// currently makes things a lot brighter ...
-
-
-
-		// update beta
-		// under construction ...
-		beta *= abs(dot(-ray.d, hitInfo.N));
-
-
-
+		if (pathLength > MAXIMUM_PATH_LENGTH) {
+			float3 criterion = hitInfo.material->spectrum(wo, ray.d, hitInfo.N);
+			float probabilityOfContinuing = std::max(criterion.x, std::max(criterion.y, criterion.z));
+			if (PCG32::rand() < probabilityOfContinuing) beta /= probabilityOfContinuing;
+			else break;
+		}
+		
+		// update throughput
+		beta *= hitInfo.material->spectrum(wo, ray.d, hitInfo.N) * abs(dot(ray.d, hitInfo.N)) / hitInfo.material->pdf(wo, ray.d);
 	}
-
-
 
 	// return radiance
 	return L;

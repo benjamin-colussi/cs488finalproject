@@ -20,6 +20,12 @@ $ type g++-15
 >> g++-15 is hashed (/usr/local/bin/g++-15) // uses gcc
 */
 
+// export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+// getconf PATH
+
+// export PATH=/sbin:/bin:/usr/sbin:/usr/bin >>> got rid of the ld's
+// which -a ld
+
 // utilities
 inline float clamp(const float x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
 inline int toInt(const float x) { return static_cast<int>(clamp(x) * 255); }
@@ -63,7 +69,9 @@ int main(const int argc, const char* argv[]) {
     // sphericalLightSource.emission = float3(500.0f);
     sphericalLightSource.centre = float3(0.0f, 0.0f, 5.0f);
     sphericalLightSource.radius = 3.0f;
-    sphericalLightSource.emission = float3(10000.0f);
+    sphericalLightSource.emission = float3(1000.0f);
+    sphericalLightSource.material = Material();
+    sphericalLightSource.material.type = MAT_LIGHT;
     globalScene.addSphericalLightSource(&sphericalLightSource);
 
     // scene calculations
