@@ -21,6 +21,8 @@ using namespace linalg::aliases;
 
 // global constants
 constexpr float Pi = 3.14159265358979f;
+constexpr float Pi_Over_2 = Pi / 2.0f;
+constexpr float Pi_Over_4 = Pi / 4.0f;
 constexpr float Pi_Inv = 1.0f / Pi;
 constexpr float Pi_2_Inv = 1.0f / (2.0f * Pi);
 constexpr float Pi_4_Inv = 1.0f / (4.0f * Pi);
@@ -76,6 +78,10 @@ constexpr int MAX_REFLECTION_RECURSION_DEPTH = 4;
 constexpr int MAX_REFRACTION_RECURSION_DEPTH = 4;
 constexpr int MAXIMUM_PATH_LENGTH = 4;
 constexpr bool SWORD_OF_LIGHT_AND_SHADOW = true;
+
+// sampling
+constexpr bool SAMPLE_UNIFORM_HEMISPHERE = true;
+constexpr bool SAMPLE_COS_WEIGHTED_HEMISPHERE = false;
 
 
 
@@ -190,41 +196,84 @@ class Material {
 
 
 
-		// sample the spectrum of the material
+		// material spectrum
 		float3 spectrum(const float3& wo, const float3& wi, const float3& n) const {
-			if (type == MAT_LAMBERTIAN) {
-				return Kd * Pi_Inv;
-			}
+
+			// perfect diffuse
+			if (type == MAT_LAMBERTIAN) return Kd * Pi_Inv;
+
+			// default
 			return float3(0.0f);
 		}
 
 
 
-		// pdf given direction and sample must be consistent with sampler
+		// sample pdf
 		float pdf(const float3& wo, const float3& wi) const {
+
+			// perfect diffuse
 			if (type == MAT_LAMBERTIAN) {
-				return Pi_2_Inv;
-				// cos(theta) * Pi_Inv
+
+				// hemisphere subtends 2 Pi steradians
+				if (SAMPLE_UNIFORM_HEMISPHERE) return Pi_2_Inv;
+
+				// assuming wo and wi are normalized
+				else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return dot(wo, wi) * Pi_Inv;
 			}
+
+			// default
 			return 0.0f;
 		}
 
 
 
-		// sample a vector and record its probability density as pdfValue
-		float3 sample(const float3& wo, const float3& n) const {
+		// sample direction
+		float3 sample(const float3& n) const {
+
+			// perfect diffuse
 			if (type == MAT_LAMBERTIAN) {
-				float3 Randy = float3(std_norm(gen), std_norm(gen), std_norm(gen));
-				while (Randy.x == 0 && Randy.y == 0 && Randy.z == 0) Randy = float3(std_norm(gen), std_norm(gen), std_norm(gen));
-				Randy = normalize(Randy);
-				if (dot(n, Randy) < 0) Randy *= -1;
-				return Randy;
-				// <<Sample cosine-weighted hemisphere to compute wi and pdf>> 
-              	// Vector3f wi = SampleCosineHemisphere(u);
-              	// if (wo.z < 0) wi.z *= -1;
-              	// Float pdf = CosineHemispherePDF(AbsCosTheta(wi));
-				// return BSDFSample(R * InvPi, wi, pdf, BxDFFlags::DiffuseReflection);
+
+				// using normalized 3d standard normal
+				if (SAMPLE_UNIFORM_HEMISPHERE) {
+					float3 d = float3(std_norm(gen), std_norm(gen), std_norm(gen));
+					while (d.x == 0 && d.y == 0 && d.z == 0) d = float3(std_norm(gen), std_norm(gen), std_norm(gen));
+					d = normalize(d);
+					if (dot(n, d) < 0) d *= -1;
+					return d;
+				}
+
+				// using malley's method
+				else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) {
+
+					// sample cos weighted positive unit hemisphere
+					float x = 2 * PCG32::rand() - 1;
+					float y = 2 * PCG32::rand() - 1;
+					if (x == 0 && y == 0) return float3(x, y, 1);
+					float theta, r;
+					if (abs(x) > abs(y)) {
+						r = x;
+						theta = Pi_Over_4 * (y / x);
+					}
+					else {
+						r = y;
+						theta = Pi_Over_2 - Pi_Over_4 * (x / y);
+					}
+					float3 d = float3(r * cos(theta), r * sin(theta), sqrtf(1 - x * x - y * y));
+
+					// build orthonormal basis with normal
+					float sign = copysignf(1, n.z);
+					const float a = -1 / (sign + n.z);
+					const float b = n.x * n.y * a;
+					const float3 b1 = float3(1 + sign * n.x * n.x * a, sign * b, -sign * n.x);
+					const float3 b2 = float3(b, sign + n.y * n.y * a, -n.y);
+
+					// centre about normal
+					// return d.x * n + d.y * b1 + d.z * b2; // cos_a
+					return d.x * b1 + d.y * b2 + d.z * n; // cos_b
+				}
 			}
+
+			// default
 			return float3(0.0f);
 		}
 
@@ -1699,7 +1748,7 @@ static float3 pathShader(Ray ray) {
 	// add filter to ray shooter
 	// is it possible to add the path twice? since everything is random?
 
-	
+
 
 	// throughput, radiance
 	float3 beta(1.0f), L(0.0f);
@@ -1723,18 +1772,16 @@ static float3 pathShader(Ray ray) {
 		// under construction ...
 		// gonna have to add emission to material and get a pdf for light sampling and move sample to material
 		if (hitInfo.material->type == MAT_LIGHT) {
-
-			if (pathLength == 1 || specularBounce == true) {
-				L += (beta * globalScene.sphericalLightSources[0]->emission * Pi_4_Inv / (hitInfo.t * hitInfo.t));
-				// divide by pdf?
-			}
-
+			// if (pathLength == 1 || specularBounce == true) {
+			// 	L += (beta * globalScene.sphericalLightSources[0]->emission * Pi_4_Inv / (hitInfo.t * hitInfo.t)); // divide by pdf?
+			// }
 			break;
 
+			// these two are the same case sort of ...
+			// if path length is 1, then the camera ray hit the light directly, just return white? or the colour of the light?
+			// if we just had a specular bounce, we should return the colour of the light or energy?
 
-
-
-
+			// otherwise if we hit a light, it would be after a diffuse surface anyways, which we have already done NEE for, so we can terminate the current path
 		}
 
 		// Incorporate emission from surface hit by ray
@@ -1782,7 +1829,7 @@ static float3 pathShader(Ray ray) {
 			}
 
 			// continue path
-			ray = Ray(hitInfo.P + hitInfo.G * Epsilon, hitInfo.material->sample(-ray.d, hitInfo.N));
+			ray = Ray(hitInfo.P + hitInfo.G * Epsilon, hitInfo.material->sample(hitInfo.N));
 		}
 
 

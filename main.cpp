@@ -4,7 +4,6 @@
 //////////   by Benjamin Colussi           ////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// incloods
 #include "cs488.h"
 
 // compile using gcc as follows for best performance:
@@ -26,13 +25,16 @@ $ type g++-15
 // export PATH=/sbin:/bin:/usr/sbin:/usr/bin >>> got rid of the ld's
 // which -a ld
 
+// default no command line argument is 2x2=4
+// 4x4=16, 8x8=64, 16x16=256, 32x32=1024, 64x64=4096, 128x128=16384
+
+
+
 // utilities
 inline float clamp(const float x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
 inline int toInt(const float x) { return static_cast<int>(clamp(x) * 255); }
 
-
-
-// main renderer
+// renderer
 int main(const int argc, const char* argv[]) {
 
     // .ppm file path

@@ -112,13 +112,8 @@ Vec radiance(const Ray& r, int depth, unsigned short* Xi, int E = 1) {
 	Vec nl = n.dot(r.d) < 0 ? n : n * -1; // properly oriented surface normal
 	Vec f = obj.colour; // object colour, BRDF modulator
 
-
-
 	// max reflection using russian roulette
 	double p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z; // takes max value
-	// if p = 0.0 then p evaluates to false
-	// if p != 0.0 then p evaluates to true
-	// so this if statement only executes if p = 0.0
 	if (++depth > 5 || !p) {
 		if (erand48(Xi) < p) f = f * (1 / p);
 		else return obj.emission * E;
