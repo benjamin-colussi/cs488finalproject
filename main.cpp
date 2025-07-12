@@ -79,9 +79,6 @@ int main(const int argc, const char* argv[]) {
     // scene calculations
     globalScene.preCalc();
 
-    // ray trace
-    // globalScene.rayTrace();
-
     // path trace
     globalScene.pathTrace(argc == 3 ? std::stoi(argv[2]) : 2);
 

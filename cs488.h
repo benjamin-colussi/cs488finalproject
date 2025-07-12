@@ -80,8 +80,8 @@ constexpr int MAXIMUM_PATH_LENGTH = 4;
 constexpr bool SWORD_OF_LIGHT_AND_SHADOW = true;
 
 // sampling
-constexpr bool SAMPLE_UNIFORM_HEMISPHERE = true;
-constexpr bool SAMPLE_COS_WEIGHTED_HEMISPHERE = false;
+constexpr bool SAMPLE_UNIFORM_HEMISPHERE = false;
+constexpr bool SAMPLE_COS_WEIGHTED_HEMISPHERE = true;
 
 
 
@@ -197,7 +197,7 @@ class Material {
 
 
 		// material spectrum
-		float3 spectrum(const float3& wo, const float3& wi, const float3& n) const {
+		float3 spectrum() const {
 
 			// perfect diffuse
 			if (type == MAT_LAMBERTIAN) return Kd * Pi_Inv;
@@ -209,7 +209,7 @@ class Material {
 
 
 		// sample pdf
-		float pdf(const float3& wo, const float3& wi) const {
+		float pdf(const float3& wo, const float3& n, const float3& wi) const {
 
 			// perfect diffuse
 			if (type == MAT_LAMBERTIAN) {
@@ -218,7 +218,10 @@ class Material {
 				if (SAMPLE_UNIFORM_HEMISPHERE) return Pi_2_Inv;
 
 				// assuming wo and wi are normalized
-				else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return dot(wo, wi) * Pi_Inv;
+				// else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return dot(wo, wi) * Pi_Inv; // cos_a, cos_b
+				// else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return abs(dot(wo, wi)) * Pi_Inv; // cos_a_c, cos_b_c
+				else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return dot(n, wi) * Pi_Inv; // cos_b_d
+				// else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return abs(dot(n, wi)) * Pi_Inv; // cos_b_e
 			}
 
 			// default
@@ -268,8 +271,8 @@ class Material {
 					const float3 b2 = float3(b, sign + n.y * n.y * a, -n.y);
 
 					// centre about normal
-					// return d.x * n + d.y * b1 + d.z * b2; // cos_a
-					return d.x * b1 + d.y * b2 + d.z * n; // cos_b
+					// return d.x * n + d.y * b1 + d.z * b2; // cos_a, cos_a_c
+					return d.x * b1 + d.y * b2 + d.z * n; // cos_b, cos_b_c // does this preserve the handedness? ...
 				}
 			}
 
@@ -1436,7 +1439,6 @@ class SphericalLightSource {
 };
 
 // forward declaration
-static float3 rayShader(const HitInfo& hit, const float3& viewDir, int level = 0);
 static float3 pathShader(Ray ray);
 
 // scene definition
@@ -1508,19 +1510,6 @@ class Scene {
 				}
 			}
 			return hit;
-		}
-
-		// ray tracing
-		void rayTrace() const {
-			for (int j = 0; j < globalHeight; ++j) {
-				for (int i = 0; i < globalWidth; ++i) {
-					const Ray r = eyeRay(i, j);
-					if (HitInfo h; intersect(h, r) == true) {
-						globalImage.pixel(i, j) = rayShader(h, -r.d);
-					}
-					else globalImage.pixel(i, j) = float3(0.0f);
-				}
-			}
 		}
 
 		// path tracing
@@ -1601,144 +1590,6 @@ static Scene globalScene;
 
 
 
-// ray tracing shading
-static float3 rayShader(const HitInfo& hit, const float3& viewDir, const int level) {
-
-	// lambertian
-	if (hit.material->type == MAT_LAMBERTIAN) {
-
-		// if lighting and shadow are off
-		if (SWORD_OF_LIGHT_AND_SHADOW == false) {
-			float3 L = float3(0.0f);
-			float3 brdf, irradiance;
-			for (int i = 0, i_n = static_cast<int>(globalScene.pointLightSources.size()); i < i_n; i++) {
-				float3 l = globalScene.pointLightSources[i]->position - hit.P;
-				const float falloff = length2(l);
-				l /= sqrtf(falloff);
-				irradiance = float(std::max(0.0f, dot(hit.N, l)) / (4.0 * Pi * falloff)) * globalScene.pointLightSources[i]->wattage;
-				brdf = hit.material->spectrum(viewDir, l, hit.N);
-				if (hit.material->isTextured) brdf *= hit.material->fetchTexture(hit.T);
-				return brdf * Pi; //debug output // comment out this line to enable illumination computation
-				L += irradiance * brdf;
-			}
-			return L;
-		}
-
-		// accumulate shading
-		float3 L = float3(0.0f);
-		float3 brdf, irradiance;
-
-		// loop over all point light sources
-		for (int i = 0, i_n = static_cast<int>(globalScene.pointLightSources.size()); i < i_n; i++) {
-
-			// ray from hit to light
-			float3 x = hit.P + Epsilon * hit.G;
-			float3 xi = globalScene.pointLightSources[i]->position - x;
-			Ray r(x, normalize(xi));
-
-			// check for intersection between hit and light
-			HitInfo h;
-			bool shadowhit = globalScene.intersect(h, r);
-			float3 xh = h.P - x;
-
-			// if no hit or hit object behind light source
-			if (shadowhit == false || (shadowhit == true && length2(xi) < length2(xh))) {
-				const float falloff = length2(xi);
-				xi /= sqrtf(falloff);
-				irradiance = float(std::max(0.0f, dot(hit.N, xi)) / (4.0f * Pi * falloff)) * globalScene.pointLightSources[i]->wattage;
-				brdf = hit.material->spectrum(viewDir, xi, hit.N);
-				if (hit.material->isTextured) brdf *= hit.material->fetchTexture(hit.T);
-				L += irradiance * brdf;
-			}
-		}
-
-		// return accumulated shading
-		return L;
-	}
-
-	// metal
-	if (hit.material->type == MAT_METAL) {
-
-		// check depth of recursion
-		if (level > MAX_REFLECTION_RECURSION_DEPTH) return float3{0.0f, 0.0f, 0.0f};
-		const int newlevel = level + 1;
-
-		// build reflected ray
-		float3 x = hit.P + Epsilon * hit.G;
-		float3 refl = -2.0f * dot(-viewDir, hit.N) * hit.N + -viewDir;
-		if (dot(refl, hit.G) < 0) refl -= dot(2.0f * refl, hit.G) * hit.G;
-		Ray r(x, normalize(refl));
-
-		// trace recursive ray
-		HitInfo h;
-		if (globalScene.intersect(h, r)) {
-			if (SWORD_OF_LIGHT_AND_SHADOW == false) return rayShader(h, -r.d, newlevel);
-			return hit.material->Ks * rayShader(h, -r.d, newlevel);
-		}
-
-		// hits the void
-		return float3(0.0f);
-	}
-
-	// glass
-	if (hit.material->type == MAT_GLASS) {
-
-		// check depth of recursion
-		if (level > MAX_REFRACTION_RECURSION_DEPTH) return float3{0.0f, 0.0f, 0.0f};
-		const int newlevel = level + 1;
-
-		// hit front - air->material - always refract
-		if (hit.front == true) {
-			float ri = Refr_Ind_Air / hit.material->eta;
-			float dp = dot(-viewDir, hit.N);
-			float rad = 1.0f - ri * ri * (1.0f - dp * dp);
-			float3 refr = ri * (-viewDir - dp * hit.N) - sqrtf(rad) * hit.N;
-			if (dot(refr, hit.G) > 0) refr -= dot(2.0f * refr, hit.N) * hit.N;
-			float3 x = hit.P - Epsilon * hit.G;
-			Ray r(x, normalize(refr));
-			HitInfo h;
-			if (globalScene.intersect(h, r)) return rayShader(h, -r.d, newlevel);
-
-			// hits the void
-			return float3(0.0f);
-		}
-
-		// hit back - material->air
-		float ri = hit.material->eta / Refr_Ind_Air;
-		float dp = dot(-viewDir, hit.N);
-		float rad = 1.0f - ri * ri * (1.0f - dp * dp);
-
-		// check for total internal reflection (TIR)
-		if (rad < 0) {
-			float3 refl = -2.0f * dp * hit.N + -viewDir;
-			if (dot(refl, hit.G) > 0) refl -= dot(2.0f * refl, hit.N) * hit.N;
-			float3 x = hit.P - Epsilon * hit.G;
-			Ray r(x, normalize(refl));
-			HitInfo h;
-			if (globalScene.intersect(h, r)) return rayShader(h, -r.d, newlevel);
-
-			// hits the void
-			return float3(0.0f);
-		}
-
-		// otherwise refract
-		float3 refr = ri * (-viewDir - dp * hit.N) - sqrtf(rad) * hit.N;
-		if (dot(refr, hit.G) < 0) refr -= dot(2.0f * refr, hit.N) * hit.N;
-		float3 x = hit.P + Epsilon * hit.G;
-		Ray r(x, normalize(refr));
-		HitInfo h;
-		if (globalScene.intersect(h, r)) return rayShader(h, -r.d, newlevel);
-
-		// hits the void
-		return float3(0.0f);
-	}
-
-	// something went wrong - make it apparent that it is an error
-	return float3{100.0f, 0.0f, 100.0f};
-}
-
-
-
 // path tracing shading
 static float3 pathShader(Ray ray) {
 
@@ -1795,7 +1646,6 @@ static float3 pathShader(Ray ray) {
         //         Float p_l = lightSampler.PMF(prevIntrCtx, areaLight) *
         //                     areaLight.PDF_Li(prevIntrCtx, ray.d, true);
         //         Float w_l = PowerHeuristic(1, p_b, 1, p_l);
-
         //         L += beta * w_l * Le;
         //     }
         // }
@@ -1823,13 +1673,13 @@ static float3 pathShader(Ray ray) {
 					const float falloffInv = 1 / dot(hitToLight, hitToLight);
 					hitToLight *= sqrtf(falloffInv);
 					const float3 irradiance = globalScene.sphericalLightSources[i]->emission * Pi_4_Inv * falloffInv;
-					const float3 numerator = beta * hitInfo.material->spectrum(wo, hitToLight, hitInfo.N) * abs(dot(hitToLight, hitInfo.N)) * irradiance;
-					L += numerator / hitInfo.material->pdf(wo, hitToLight);
+					const float3 numerator = beta * hitInfo.material->spectrum() * dot(hitToLight, hitInfo.G) * irradiance;
+					L += numerator / hitInfo.material->pdf(wo, hitInfo.G, hitToLight);
 				}
 			}
 
 			// continue path
-			ray = Ray(hitInfo.P + hitInfo.G * Epsilon, hitInfo.material->sample(hitInfo.N));
+			ray = Ray(hitInfo.P + hitInfo.G * Epsilon, hitInfo.material->sample(hitInfo.G));
 		}
 
 
@@ -1847,14 +1697,14 @@ static float3 pathShader(Ray ray) {
 
 		// russian roulette
 		if (pathLength > MAXIMUM_PATH_LENGTH) {
-			float3 criterion = hitInfo.material->spectrum(wo, ray.d, hitInfo.N);
+			float3 criterion = hitInfo.material->spectrum();
 			float probabilityOfContinuing = std::max(criterion.x, std::max(criterion.y, criterion.z));
 			if (PCG32::rand() < probabilityOfContinuing) beta /= probabilityOfContinuing;
 			else break;
 		}
 		
 		// update throughput
-		beta *= hitInfo.material->spectrum(wo, ray.d, hitInfo.N) * abs(dot(ray.d, hitInfo.N)) / hitInfo.material->pdf(wo, ray.d);
+		beta *= hitInfo.material->spectrum() * dot(ray.d, hitInfo.G) / hitInfo.material->pdf(wo, hitInfo.G, ray.d);
 	}
 
 	// return radiance

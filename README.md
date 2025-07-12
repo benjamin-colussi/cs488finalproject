@@ -14,6 +14,13 @@
 
 
 
+## Currently working on:
+* implemented malley for cos weighted importance sampling
+* with orthonormal basis method from that paper
+* but this doesnt seem to be working
+
+
+
 
 ## Friday:
 * implement Malley for cosine weighted sampling
@@ -59,3 +66,4 @@ Set up geometry class with material, intersection, etc.
 ## Questions:
 * for path tracing, when we write the LTE as an integral over paths, do we still generate random direction rays? or should we be sampling from all the objects in scene?
 * why divide by 2 pi for uniform hemisphere? steradians? help visualizing?
+* generating cos weighted hemisphere direction in small path tracer vs pbrt?
