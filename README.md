@@ -12,6 +12,18 @@
 * installed gcc and using compiler optimizations
 * we r rly flyin now
 
+## I believe the following are working now:
+* uniform and cosine-weighted hemisphere sampling
+* along with PDFs ...
+* actually we still have to implement the light PDFs
+
+
+
+## Next:
+* i kinda wanna try to fix the VSCode conda shell bug again ... just try for an hour or so ...
+* read about multiple importance sampling and then implement
+* fix all boolean checks to not use "== true" to avoid that one bug again
+
 
 
 
@@ -78,3 +90,11 @@ Set up geometry class with material, intersection, etc.
 * a little stumped on perfect reflection ...
 
 * what is the reason for passing by reference? is it to not overflow?
+
+* is the method in the lecture slides better than disk method and malley in pbr for drawing cosine weighted samples?
+
+* when drawing "samples" are we referring to drawing "paths" or "next vertices or directions" ???
+* because when we are "sampling" to estimate the integral, we are technically drawing samples from surface area or solid angle
+* in order to estimate the integrand, which 
+* we are sampling these paths, and technically as we sample an additional vertex, we are sampling an entirely new path, which is our method of incrementally building the paths
+* im trying to understand how the sampling methods align with the mathematics fo the integral

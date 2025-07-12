@@ -1625,7 +1625,7 @@ static float3 pathShader(Ray ray) {
 	float3 beta(1.0f), L(0.0f);
 
 	// hit a mirror
-	bool specularBounce = false;
+	// bool specularBounce = false;
 
 	// trace path(s)
 	int pathLength = 0;
@@ -1687,7 +1687,7 @@ static float3 pathShader(Ray ray) {
 					const float falloffInv = 1 / dot(hitToLight, hitToLight);
 					hitToLight *= sqrtf(falloffInv);
 					const float3 irradiance = globalScene.sphericalLightSources[i]->emission * Pi_4_Inv * falloffInv;
-					const float3 numerator = beta * hitInfo.material->spectrum() * dot(hitToLight, hitInfo.G) * irradiance;
+					const float3 numerator = beta * hitInfo.material->spectrum() * dot(hitToLight, hitInfo.G) * irradiance; // might have to use shadowHitInfo ?????
 					L += numerator / hitInfo.material->pdf(wo, hitInfo.G, hitToLight);
 				}
 			}
@@ -1698,14 +1698,15 @@ static float3 pathShader(Ray ray) {
 
 		// specular bounce
 		else if (hitInfo.material->type == MAT_METAL) {
-			specularBounce = true;
+			// specularBounce = true;
 			ray = Ray(hitInfo.P + hitInfo.G + Epsilon, hitInfo.material->sampleDirection(wo, hitInfo.G));
 		}
 
 		// russian roulette
 		if (pathLength > MAXIMUM_PATH_LENGTH) {
-			float3 criterion = hitInfo.material->spectrum();
-			float probabilityOfContinuing = std::max(criterion.x, std::max(criterion.y, criterion.z));
+			// float3 criterion = hitInfo.material->spectrum();
+			// float probabilityOfContinuing = std::max(criterion.x, std::max(criterion.y, criterion.z));
+			float probabilityOfContinuing = std::max(beta.x, std::max(beta.y, beta.z)); // new RR strategy :D
 			if (PCG32::rand() < probabilityOfContinuing) beta /= probabilityOfContinuing;
 			else break;
 		}
