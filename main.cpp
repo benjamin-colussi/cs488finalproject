@@ -61,25 +61,32 @@ int main(const int argc, const char* argv[]) {
     }
     globalScene.addObject(&mesh);
 
+
+    
     // set up lighting
-    // PointLightSource pointLightSource;
-    // light.position = float3(3.0f, 3.0f, 3.0f);
-    // light.wattage = float3(1000.0f, 1000.0f, 1000.0f);
     SphericalLightSource sphericalLightSource;
-    // sphericalLightSource.centre = float3(0.0f, 0.25f, 0.0f);
+
+    // default light
+    // sphericalLightSource.centre = float3(3.0f, 3.0f, 3.0f);
+    // sphericalLightSource.radius = 0.25f;
+
+    // ceiling light
+    // sphericalLightSource.centre = float3(0.0f, 0.4f, 0.0f);
     // sphericalLightSource.radius = 0.05f;
-    // sphericalLightSource.emission = float3(500.0f);
+
+    // big central light behind camera
     sphericalLightSource.centre = float3(0.0f, 0.0f, 5.0f);
     sphericalLightSource.radius = 3.0f;
-    sphericalLightSource.emission = float3(1000.0f);
-    sphericalLightSource.material = Material();
-    sphericalLightSource.material.type = MAT_LIGHT;
+
+    // sphericalLightSource.emission = float3(1000.0f); // used when sampling the whole big light surface
+    sphericalLightSource.emission = float3(200.0f); // used when sampling only the visible side of the big light
+    // sphericalLightSource.emission = float3(5.0f);
     globalScene.addSphericalLightSource(&sphericalLightSource);
 
-    // scene calculations
-    globalScene.preCalc();
+
 
     // path trace
+    globalScene.preCalc();
     globalScene.pathTrace(argc == 3 ? std::stoi(argv[2]) : 2);
 
     // write to .ppm file

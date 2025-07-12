@@ -61,19 +61,19 @@ struct Sphere {
 Sphere spheres[] = {
 
 	// left, right, back, front, bottom, top
-	Sphere(1e5, Vec( 1e5+1,40.8,81.6), Vec(),Vec(.75,.25,.25), DIFFUSE),
-	Sphere(1e5, Vec(-1e5+99,40.8,81.6),Vec(),Vec(.25,.25,.75), DIFFUSE),
-	Sphere(1e5, Vec(50,40.8, 1e5),     Vec(),Vec(.75,.75,.75), DIFFUSE),
-	Sphere(1e5, Vec(50,40.8,-1e5+170), Vec(),Vec(), DIFFUSE),
-	Sphere(1e5, Vec(50, 1e5, 81.6),    Vec(),Vec(.75,.75,.75), DIFFUSE),
-	Sphere(1e5, Vec(50,-1e5+81.6,81.6),Vec(),Vec(.75,.75,.75), DIFFUSE),
+	Sphere(1e5, Vec( 1e5+1,40.8,81.6),  Vec(), Vec(.75,.25,.25), DIFFUSE),
+	Sphere(1e5, Vec(-1e5+99,40.8,81.6), Vec(), Vec(.25,.25,.75), DIFFUSE),
+	Sphere(1e5, Vec(50,40.8, 1e5),      Vec(), Vec(.75,.75,.75), DIFFUSE),
+	Sphere(1e5, Vec(50,40.8,-1e5+170),  Vec(), Vec(),            DIFFUSE),
+	Sphere(1e5, Vec(50, 1e5, 81.6),     Vec(), Vec(.75,.75,.75), DIFFUSE),
+	Sphere(1e5, Vec(50,-1e5+81.6,81.6), Vec(), Vec(.75,.75,.75), DIFFUSE),
 
 	// balls
-	Sphere(16.5,Vec(27,16.5,47),Vec(),Vec(1,1,1)*.999, SPECULAR),
-	Sphere(16.5,Vec(73,16.5,78),Vec(),Vec(1,1,1)*.999, SPECULAR),
+	Sphere(16.5, Vec(27,16.5,47), Vec(), Vec(1,1,1) * .999, SPECULAR),
+	Sphere(16.5, Vec(73,16.5,78), Vec(), Vec(1,1,1) * .999, SPECULAR),
 
 	// light
-	Sphere(1.5, Vec(50,81.6-16.5,81.6),Vec(4,4,4)*100,Vec(), DIFFUSE),
+	Sphere(1.5, Vec(50,81.6-16.5,81.6), Vec(4,4,4) * 100, Vec(), DIFFUSE),
 };
 
 // global variables
@@ -124,14 +124,6 @@ Vec radiance(const Ray& r, int depth, unsigned short* Xi, int E = 1) {
 	// ideal diffuse reflection
 	if (obj.refl == DIFFUSE) {
 
-		// importance sampling with cosine, orthonormal basis transformation
-		double r1 = 2 * M_PI * erand48(Xi); // angle around
-		double r2 = erand48(Xi), r2s = sqrt(r2); // distance from centre
-		Vec w = nl; // w = normal
-		Vec u = ((fabs(w.x) > 0.1 ? Vec(0,1) : Vec(1)) % w).norm(); // u is perp to w
-		Vec v = w % u; // v is perp to w and u
-		Vec d = (u * cos(r1) * r2s + v * sin(r1) * r2s + w * sqrt(1 - r2)).norm(); // random reflected ray
-
 		// loop over explicit lights
 		Vec e;
 		for (int i = 0; i < numSpheres; i++) {
@@ -158,6 +150,14 @@ Vec radiance(const Ray& r, int depth, unsigned short* Xi, int E = 1) {
 				e = e + f.mult(s.emission * l.dot(nl) * omega) * M_1_PI;  // 1 / pi for brdf
 			}
 		}
+
+		// importance sampling with cosine, orthonormal basis transformation
+		double r1 = 2 * M_PI * erand48(Xi); // angle around
+		double r2 = erand48(Xi), r2s = sqrt(r2); // distance from centre
+		Vec w = nl; // w = normal
+		Vec u = ((fabs(w.x) > 0.1 ? Vec(0,1) : Vec(1)) % w).norm(); // u is perp to w
+		Vec v = w % u; // v is perp to w and u
+		Vec d = (u * cos(r1) * r2s + v * sin(r1) * r2s + w * sqrt(1 - r2)).norm(); // random reflected ray
 
 		// recursive call of light transport equation
 		return obj.emission * E + e + f.mult(radiance(Ray(x, d), depth, Xi, 0));

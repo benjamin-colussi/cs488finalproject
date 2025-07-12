@@ -202,6 +202,9 @@ class Material {
 			// perfect diffuse
 			if (type == MAT_LAMBERTIAN) return Kd * Pi_Inv;
 
+			// perfect specular reflection
+			if (type == MAT_METAL) {}
+
 			// default
 			return float3(0.0f);
 		}
@@ -217,12 +220,12 @@ class Material {
 				// hemisphere subtends 2 Pi steradians
 				if (SAMPLE_UNIFORM_HEMISPHERE) return Pi_2_Inv;
 
-				// assuming wo and wi are normalized
-				// else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return dot(wo, wi) * Pi_Inv; // cos_a, cos_b
-				// else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return abs(dot(wo, wi)) * Pi_Inv; // cos_a_c, cos_b_c
-				else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return dot(n, wi) * Pi_Inv; // cos_b_d
-				// else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return abs(dot(n, wi)) * Pi_Inv; // cos_b_e
+				// inputs must be normalized
+				else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return dot(n, wi) * Pi_Inv;
 			}
+
+			// perfect specular reflection
+			if (type == MAT_METAL) {}
 
 			// default
 			return 0.0f;
@@ -231,7 +234,7 @@ class Material {
 
 
 		// sample direction
-		float3 sample(const float3& n) const {
+		float3 sampleDirection(const float3& wo, const float3& n) const {
 
 			// perfect diffuse
 			if (type == MAT_LAMBERTIAN) {
@@ -271,9 +274,15 @@ class Material {
 					const float3 b2 = float3(b, sign + n.y * n.y * a, -n.y);
 
 					// centre about normal
-					// return d.x * n + d.y * b1 + d.z * b2; // cos_a, cos_a_c
-					return d.x * b1 + d.y * b2 + d.z * n; // cos_b, cos_b_c // does this preserve the handedness? ...
+					return d.x * b1 + d.y * b2 + d.z * n;
 				}
+			}
+
+			// perfect specular reflection
+			if (type == MAT_METAL) {
+				float3 reflection = wo - 2 * dot(wo, n) * n;
+				// if (dot(reflection, n) < 0) reflection -= 2 * dot(reflection, n) * n; // unecessary? ...
+				return normalize(reflection);
 			}
 
 			// default
@@ -1377,16 +1386,6 @@ bool BVH::traverse(HitInfo& minHit, const Ray& ray, int node_id, float tMin, flo
 
 
 
-// point light source
-class PointLightSource {
-
-	public:
-
-		float3 position;
-		float3 wattage;
-
-};
-
 // spherical light source
 class SphericalLightSource {
 
@@ -1395,13 +1394,47 @@ class SphericalLightSource {
 		float3 centre;
 		float radius;
 		float3 emission;
-		Material material;
 		
 		// generate random point on the sphere
-		float3 sample() {
-			float3 Randy = float3(std_norm(gen), std_norm(gen), std_norm(gen));
-			while (dot(Randy, Randy) == 0) Randy = float3(std_norm(gen), std_norm(gen), std_norm(gen));
-			return normalize(Randy) * radius;
+		float3 sampleSurface(const float3& n) {
+
+			// using normalized 3d standard normal
+			if (SAMPLE_UNIFORM_HEMISPHERE) {
+				float3 d = float3(std_norm(gen), std_norm(gen), std_norm(gen));
+				while (d.x == 0 && d.y == 0 && d.z == 0) d = float3(std_norm(gen), std_norm(gen), std_norm(gen));
+				d = normalize(d);
+				if (dot(n, d) < 0) d *= -1;
+				return centre + radius * d;
+			}
+
+			// using malley's method
+			else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) {
+
+				// sample cos weighted positive unit hemisphere
+				float x = 2 * PCG32::rand() - 1;
+				float y = 2 * PCG32::rand() - 1;
+				if (x == 0 && y == 0) return float3(x, y, 1);
+				float theta, r;
+				if (abs(x) > abs(y)) {
+					r = x;
+					theta = Pi_Over_4 * (y / x);
+				}
+				else {
+					r = y;
+					theta = Pi_Over_2 - Pi_Over_4 * (x / y);
+				}
+				float3 d = float3(r * cos(theta), r * sin(theta), sqrtf(1 - x * x - y * y));
+
+				// build orthonormal basis with normal
+				float sign = copysignf(1, n.z);
+				const float a = -1 / (sign + n.z);
+				const float b = n.x * n.y * a;
+				const float3 b1 = float3(1 + sign * n.x * n.x * a, sign * b, -sign * n.x);
+				const float3 b2 = float3(b, sign + n.y * n.y * a, -n.y);
+
+				// centre about normal
+				return centre + radius * (d.x * b1 + d.y * b2 + d.z * n);
+			}
 		}
 
 		// check if ray intersects sphere
@@ -1431,7 +1464,6 @@ class SphericalLightSource {
 			// set hit info and return
 			hitInfo.t = t;
 			hitInfo.P = ray.o + hitInfo.t * ray.d;
-			hitInfo.material = &material;
 			hitInfo.G = normalize(hitInfo.P - centre);
 			return true;
 		}
@@ -1448,15 +1480,11 @@ class Scene {
 
 		// scene components
 		std::vector<TriangleMesh*> objects;
-		std::vector<PointLightSource*> pointLightSources;
 		std::vector<SphericalLightSource*> sphericalLightSources;
 		std::vector<BVH> bvhs;
 
 		// add object triangle mesh to scene
 		void addObject(TriangleMesh* pObj) { objects.push_back(pObj); }
-
-		// add point light source to scene
-		void addPointLightSource(PointLightSource* pObj) { pointLightSources.push_back(pObj); }
 
 		// add spherical light source to scene
 		void addSphericalLightSource(SphericalLightSource* pObj) { sphericalLightSources.push_back(pObj); }
@@ -1593,14 +1621,6 @@ static Scene globalScene;
 // path tracing shading
 static float3 pathShader(Ray ray) {
 
-
-
-	// maybe call the incoming ray "wi" for consistency ???
-	// add filter to ray shooter
-	// is it possible to add the path twice? since everything is random?
-
-
-
 	// throughput, radiance
 	float3 beta(1.0f), L(0.0f);
 
@@ -1619,13 +1639,17 @@ static float3 pathShader(Ray ray) {
 
 
 
+
+
 		// hit a light
 		// under construction ...
 		// gonna have to add emission to material and get a pdf for light sampling and move sample to material
-		if (hitInfo.material->type == MAT_LIGHT) {
+		if (hitInfo.light == true) {
 			// if (pathLength == 1 || specularBounce == true) {
 			// 	L += (beta * globalScene.sphericalLightSources[0]->emission * Pi_4_Inv / (hitInfo.t * hitInfo.t)); // divide by pdf?
 			// }
+
+			// return float3(1.0f, 0.0f, 1.0f);
 			break;
 
 			// these two are the same case sort of ...
@@ -1635,32 +1659,22 @@ static float3 pathShader(Ray ray) {
 			// otherwise if we hit a light, it would be after a diffuse surface anyways, which we have already done NEE for, so we can terminate the current path
 		}
 
-		// Incorporate emission from surface hit by ray
-        // SampledSpectrum Le = si->intr.Le(-ray.d, lambda);
-        // if (Le) {
-        //     if (depth == 0 || specularBounce)
-        //         L += beta * Le;
-        //     else {
-        //         // Compute MIS weight for area light
-        //         Light areaLight(si->intr.areaLight);
-        //         Float p_l = lightSampler.PMF(prevIntrCtx, areaLight) *
-        //                     areaLight.PDF_Li(prevIntrCtx, ray.d, true);
-        //         Float w_l = PowerHeuristic(1, p_b, 1, p_l);
-        //         L += beta * w_l * Le;
-        //     }
-        // }
 
 
+
+
+		// maybe call the outgoing ray "wi" for consistency ???
 
 		// diffuse reflection
-		else if (hitInfo.material->type == MAT_LAMBERTIAN) {
+		if (hitInfo.material->type == MAT_LAMBERTIAN) {
 
 			// next event estimation of direct lighting
 			for (int i = 0, i_n = static_cast<int>(globalScene.sphericalLightSources.size()); i < i_n; ++i) {
 
 				// calculate vector from hit to light
 				float3 hitPoint = hitInfo.P + hitInfo.G * Epsilon;
-				float3 lightPoint = globalScene.sphericalLightSources[i]->sample();
+				float3 lightNormal = normalize(hitPoint - globalScene.sphericalLightSources[i]->centre);
+				float3 lightPoint = globalScene.sphericalLightSources[i]->sampleSurface(lightNormal);
 				float3 hitToLight = lightPoint - hitPoint;
 
 				// trace shadow ray from hit to light
@@ -1679,21 +1693,14 @@ static float3 pathShader(Ray ray) {
 			}
 
 			// continue path
-			ray = Ray(hitInfo.P + hitInfo.G * Epsilon, hitInfo.material->sample(hitInfo.G));
+			ray = Ray(hitInfo.P + hitInfo.G * Epsilon, hitInfo.material->sampleDirection(wo, hitInfo.G));
 		}
-
-
 
 		// specular bounce
-		// under construction ...
 		else if (hitInfo.material->type == MAT_METAL) {
 			specularBounce = true;
-
-			// generate perfectly reflected ray
-			// implement in material class
+			ray = Ray(hitInfo.P + hitInfo.G + Epsilon, hitInfo.material->sampleDirection(wo, hitInfo.G));
 		}
-
-
 
 		// russian roulette
 		if (pathLength > MAXIMUM_PATH_LENGTH) {

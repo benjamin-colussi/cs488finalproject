@@ -14,25 +14,21 @@
 
 
 
+
+* i think we need to change NEE code to use area formulation
+* we should try to learn about MIS next, because we have sampling methods ready to go
+
 ## Currently working on:
-* implemented malley for cos weighted importance sampling
-* with orthonormal basis method from that paper
-* but this doesnt seem to be working
+* implemented malley for cos weighted importance sampling with the duff othonormal basis
+* now let's work on sampling from lights better ...
+* this will involve what? ...
+* 
 
-
-
-
-## Friday:
-* implement Malley for cosine weighted sampling
 * fix direct light sampling
 * implement mirror reflections
-* cosine weighted importance sampling for diffuse surfaces
 * cosine weighted importance sampling for light surfaces
 * multiple importance sampling
 * filter camera rays
-
-
-
 
 ## To do:
 Work through the LTE
@@ -41,6 +37,7 @@ Set up BRDF class
 Set up the material class w/ proper BSDF, PDF, sampling
 Consult paper on drawing better orthonormal bases
 Set up geometry class with material, intersection, etc.
+
 
 
 
@@ -67,3 +64,17 @@ Set up geometry class with material, intersection, etc.
 * for path tracing, when we write the LTE as an integral over paths, do we still generate random direction rays? or should we be sampling from all the objects in scene?
 * why divide by 2 pi for uniform hemisphere? steradians? help visualizing?
 * generating cos weighted hemisphere direction in small path tracer vs pbrt?
+
+* is it possible to sample the same path twice? should we account for this?
+
+* if we sample from a BRDF for a diffuse surface, we r getting a random direction - so we use the solid angle integral?
+* if we sample from the surface of a light, we get a point on the surface and test visibility - so we use the area integral?
+* can we mix the two approaches? do we have to be careful about anything?
+* is this where multiple importance sampling comes in?
+
+* how to model the light itself accurately? we use wattage but im confused ...
+* should it fall off at distance increases?
+
+* a little stumped on perfect reflection ...
+
+* what is the reason for passing by reference? is it to not overflow?
