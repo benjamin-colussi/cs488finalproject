@@ -63,26 +63,19 @@ int main(const int argc, const char* argv[]) {
 
 
     
+    ///////////////////////////////////////////////////////////////////////////////////////////////
     // set up lighting
     // camera is at (0, 0, 1.5) looking to -z
     SphericalLightSource sphericalLightSource;
-
-    // default light
-    // sphericalLightSource.centre = float3(3.0f, 3.0f, 3.0f);
-    // sphericalLightSource.radius = 0.25f;
-
-    // ceiling light
-    // sphericalLightSource.centre = float3(0.0f, 0.4f, 0.0f);
-    // sphericalLightSource.radius = 0.05f;
-
-    // big central light behind camera
-    sphericalLightSource.centre = float3(0.0f, -0.3f, 2.5f);
-    sphericalLightSource.radius = 0.1f;
-
-    // sphericalLightSource.emission = float3(1000.0f); // used when sampling the whole big light surface
-    sphericalLightSource.emission = float3(60.0f); // used when sampling only the visible side of the big light
-    // sphericalLightSource.emission = float3(5.0f);
+    sphericalLightSource.centre = float3(-0.25f, 0.25f, 0.0f);
+    // sphericalLightSource.centre = float3(0.0f, 0.325f, 0.0f);
+    sphericalLightSource.radius = 0.025f;
+    sphericalLightSource.power = float3(5.0f);
+    // sphericalLightSource.centre = float3(0.0f, -0.3f, 2.5f);
+    // sphericalLightSource.radius = 0.1f;
+    // sphericalLightSource.power = float3(1000.0f); // used when sampling the whole big light surface
     globalScene.addSphericalLightSource(&sphericalLightSource);
+    ///////////////////////////////////////////////////////////////////////////////////////////////
 
 
 

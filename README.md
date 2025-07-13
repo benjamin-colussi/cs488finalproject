@@ -98,3 +98,5 @@ Set up geometry class with material, intersection, etc.
 * in order to estimate the integrand, which 
 * we are sampling these paths, and technically as we sample an additional vertex, we are sampling an entirely new path, which is our method of incrementally building the paths
 * im trying to understand how the sampling methods align with the mathematics fo the integral
+
+* what the eff is f

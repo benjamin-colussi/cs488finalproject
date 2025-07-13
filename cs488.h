@@ -76,7 +76,7 @@ std::normal_distribution<float> std_norm(mu, sigma);
 // switches
 constexpr int MAX_REFLECTION_RECURSION_DEPTH = 4;
 constexpr int MAX_REFRACTION_RECURSION_DEPTH = 4;
-constexpr int MAXIMUM_PATH_LENGTH = 4;
+constexpr int MAXIMUM_PATH_LENGTH = 2;
 constexpr bool SWORD_OF_LIGHT_AND_SHADOW = true;
 
 // sampling
@@ -194,8 +194,6 @@ class Material {
 			return float3(r, g, b) / 255.0f;
 		}
 
-
-
 		// material spectrum
 		float3 spectrum() const {
 
@@ -208,30 +206,6 @@ class Material {
 			// default
 			return float3(0.0f);
 		}
-
-
-
-		// sample pdf
-		float pdf(const float3& wo, const float3& n, const float3& wi) const {
-
-			// perfect diffuse
-			if (type == MAT_LAMBERTIAN) {
-
-				// hemisphere subtends 2 Pi steradians
-				if (SAMPLE_UNIFORM_HEMISPHERE) return Pi_2_Inv;
-
-				// inputs must be normalized
-				else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return dot(n, wi) * Pi_Inv;
-			}
-
-			// perfect specular reflection
-			if (type == MAT_METAL) {}
-
-			// default
-			return 0.0f;
-		}
-
-
 
 		// sample direction
 		float3 sampleDirection(const float3& wo, const float3& n) const {
@@ -287,6 +261,26 @@ class Material {
 
 			// default
 			return float3(0.0f);
+		}
+
+		// sample pdf
+		float pdf(const float3& n, const float3& wi) const {
+
+			// perfect diffuse
+			if (type == MAT_LAMBERTIAN) {
+
+				// hemisphere subtends 2 Pi steradians
+				if (SAMPLE_UNIFORM_HEMISPHERE) return Pi_2_Inv;
+
+				// inputs must be normalized
+				else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return dot(n, wi) * Pi_Inv;
+			}
+
+			// perfect specular reflection
+			if (type == MAT_METAL) {}
+
+			// default
+			return 0.0f;
 		}
 
 };
@@ -1393,8 +1387,39 @@ class SphericalLightSource {
 
 		float3 centre;
 		float radius;
-		float3 emission;
-		
+		float3 power;
+
+		// check if ray intersects sphere
+		bool intersect(HitInfo& hitInfo, const Ray& ray, float tMin, float tMax) {
+
+			// solve quadratic vector equation
+			float3 oc = centre - ray.o;
+			float b = dot(ray.d, oc);
+			float c = dot(oc, oc) - radius * radius;
+			float discriminant = b * b - c;
+
+			// no intersection
+			if (discriminant < 0) return false;
+
+			// intersection
+			discriminant = sqrtf(discriminant);
+
+			// find minimum t
+			float t = b - discriminant;
+			if (t < tMin || tMax < t) {
+				t = b + discriminant;
+				if (t < tMin || tMax < t) {
+					return false;
+				}
+			}
+
+			// set hit info and return
+			hitInfo.t = t;
+			hitInfo.P = ray.o + hitInfo.t * ray.d;
+			hitInfo.G = normalize(hitInfo.P - centre);
+			return true;
+		}
+
 		// generate random point on the sphere
 		float3 sampleSurface(const float3& n) {
 
@@ -1437,35 +1462,14 @@ class SphericalLightSource {
 			}
 		}
 
-		// check if ray intersects sphere
-		bool intersect(HitInfo& hitInfo, const Ray& ray, float tMin, float tMax) {
+		// sample pdf
+		float pdf(const float3& n, const float3& wi) const {
 
-			// solve quadratic vector equation
-			float3 oc = centre - ray.o;
-			float b = dot(ray.d, oc);
-			float c = dot(oc, oc) - radius * radius;
-			float discriminant = b * b - c;
+			// hemisphere subtends 2 Pi steradians
+			if (SAMPLE_UNIFORM_HEMISPHERE) return Pi_2_Inv;
 
-			// no intersection
-			if (discriminant < 0) return false;
-
-			// intersection
-			discriminant = sqrtf(discriminant);
-
-			// find minimum t
-			float t = b - discriminant;
-			if (t < tMin || tMax < t) {
-				t = b + discriminant;
-				if (t < tMin || tMax < t) {
-					return false;
-				}
-			}
-
-			// set hit info and return
-			hitInfo.t = t;
-			hitInfo.P = ray.o + hitInfo.t * ray.d;
-			hitInfo.G = normalize(hitInfo.P - centre);
-			return true;
+			// inputs must be normalized
+			else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return dot(n, wi) * Pi_Inv;
 		}
 
 };
@@ -1644,7 +1648,7 @@ static float3 pathShader(Ray ray) {
 		// hit a light
 		// under construction ...
 		// gonna have to add emission to material and get a pdf for light sampling and move sample to material
-		if (hitInfo.light == true) {
+		if (hitInfo.light) {
 			// if (pathLength == 1 || specularBounce == true) {
 			// 	L += (beta * globalScene.sphericalLightSources[0]->emission * Pi_4_Inv / (hitInfo.t * hitInfo.t)); // divide by pdf?
 			// }
@@ -1668,32 +1672,55 @@ static float3 pathShader(Ray ray) {
 		// diffuse reflection
 		if (hitInfo.material->type == MAT_LAMBERTIAN) {
 
+			// nudge the vertex along the normal
+			float3 hitPoint = hitInfo.P + hitInfo.G * Epsilon;
+
 			// next event estimation of direct lighting
 			for (int i = 0, i_n = static_cast<int>(globalScene.sphericalLightSources.size()); i < i_n; ++i) {
 
 				// calculate vector from hit to light
-				float3 hitPoint = hitInfo.P + hitInfo.G * Epsilon;
 				float3 lightNormal = normalize(hitPoint - globalScene.sphericalLightSources[i]->centre);
 				float3 lightPoint = globalScene.sphericalLightSources[i]->sampleSurface(lightNormal);
 				float3 hitToLight = lightPoint - hitPoint;
 
 				// trace shadow ray from hit to light
 				HitInfo shadowHitInfo;
-				Ray shadowRay(hitPoint, normalize(hitToLight));
-				globalScene.intersect(shadowHitInfo, shadowRay);
+				globalScene.intersect(shadowHitInfo, Ray(hitPoint, normalize(hitToLight))); // tidy this up making use of the boolean return value
 
 				// calculate irradiance
-				if (shadowHitInfo.light == true) {
-					const float falloffInv = 1 / dot(hitToLight, hitToLight);
-					hitToLight *= sqrtf(falloffInv);
-					const float3 irradiance = globalScene.sphericalLightSources[i]->emission * Pi_4_Inv * falloffInv;
-					const float3 numerator = beta * hitInfo.material->spectrum() * dot(hitToLight, hitInfo.G) * irradiance; // might have to use shadowHitInfo ?????
-					L += numerator / hitInfo.material->pdf(wo, hitInfo.G, hitToLight);
+				if (shadowHitInfo.light) { // tidy this up making use of the boolean return value
+
+					// this approach seems to work
+					// const float falloffInv = 1 / dot(hitToLight, hitToLight);
+					// hitToLight *= sqrtf(falloffInv);
+					// const float3 irradiance = globalScene.sphericalLightSources[i]->power * Pi_4_Inv * falloffInv;
+					// const float3 numerator = beta * hitInfo.material->spectrum() * dot(hitToLight, hitInfo.G) * irradiance; // might need some work ...
+					// L += numerator / hitInfo.material->pdf(hitInfo.G, hitToLight);
+
+					// this one includes the one additional cos term from the geometry >>> darkens the image and seems more realistic based on my light values
+					const float distanceSquaredInv = 1 / dot(hitToLight, hitToLight);
+					hitToLight *= sqrtf(distanceSquaredInv);
+					const float3 lightTerm = globalScene.sphericalLightSources[i]->power * Pi_4_Inv;
+					const float geometryTerm = dot(hitInfo.G, wo) * dot(hitInfo.G, hitToLight) * distanceSquaredInv;
+					L += beta * hitInfo.material->spectrum() * lightTerm * geometryTerm / globalScene.sphericalLightSources[i]->pdf(hitInfo.G, hitToLight);
+
+					// both of these still dont rly work with the light inside the box ...
+					// const float distanceSquaredInv = 1 / dot(hitToLight, hitToLight);
+					// hitToLight *= sqrtf(distanceSquaredInv);
+					// const float3 lightTerm = globalScene.sphericalLightSources[i]->power * Pi_4_Inv * distanceSquaredInv; // added the distance squared division
+					// const float geometryTerm = dot(hitInfo.G, wo) * dot(hitInfo.G, hitToLight) * distanceSquaredInv;
+					// L += beta * hitInfo.material->spectrum() * lightTerm * geometryTerm / globalScene.sphericalLightSources[i]->pdf(hitInfo.G, hitToLight); // should be dividing by number of lights?
+
+					// another one ...
+					// const float distanceSquaredInv = 1 / dot(hitToLight, hitToLight);
+					// hitToLight *= sqrtf(distanceSquaredInv);
+					// const float f = hitInfo.material->spectrum() * dot(hitInfo.G, hitToLight);
+
 				}
 			}
 
 			// continue path
-			ray = Ray(hitInfo.P + hitInfo.G * Epsilon, hitInfo.material->sampleDirection(wo, hitInfo.G));
+			ray = Ray(hitPoint, hitInfo.material->sampleDirection(wo, hitInfo.G));
 		}
 
 		// specular bounce
@@ -1701,18 +1728,16 @@ static float3 pathShader(Ray ray) {
 			// specularBounce = true;
 			ray = Ray(hitInfo.P + hitInfo.G + Epsilon, hitInfo.material->sampleDirection(wo, hitInfo.G));
 		}
+		
+		// update throughput
+		beta *= hitInfo.material->spectrum() * dot(hitInfo.G, ray.d) / hitInfo.material->pdf(hitInfo.G, ray.d); // look at this - do we have to include L ???
 
 		// russian roulette
 		if (pathLength > MAXIMUM_PATH_LENGTH) {
-			// float3 criterion = hitInfo.material->spectrum();
-			// float probabilityOfContinuing = std::max(criterion.x, std::max(criterion.y, criterion.z));
-			float probabilityOfContinuing = std::max(beta.x, std::max(beta.y, beta.z)); // new RR strategy :D
+			float probabilityOfContinuing = std::max(beta.x, std::max(beta.y, beta.z));
 			if (PCG32::rand() < probabilityOfContinuing) beta /= probabilityOfContinuing;
 			else break;
 		}
-		
-		// update throughput
-		beta *= hitInfo.material->spectrum() * dot(ray.d, hitInfo.G) / hitInfo.material->pdf(wo, hitInfo.G, ray.d);
 	}
 
 	// return radiance
