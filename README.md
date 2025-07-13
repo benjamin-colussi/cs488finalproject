@@ -1,4 +1,7 @@
-# READ ME BRO
+###### ###### ###### ###### ###### ###### ###### ###### ###### ######
+###### READ ME BRO   ###### ###### ###### ###### ###### ###### ######
+###### ###### ###### ###### ###### ###### ###### ###### ###### ######
+
 
 ## Done:
 * set up github repo
@@ -10,52 +13,42 @@
 * switched from clion to vscode
 * got parallelization working with OpenMP
 * installed gcc and using compiler optimizations
-* we r rly flyin now
+* we r rly flyin now !!!
+* i uninstalled anaconda so ill probs have to fix this later ...
 
 ## I believe the following are working now:
-* uniform and cosine-weighted hemisphere sampling
-* along with PDFs ...
-* actually we still have to implement the light PDFs
+* implemented spherical area lights
+* uniform and cosine-weighted disk malley duff hemisphere sampling - along with PDFs
 
+
+###### ###### ###### ###### ###### ###### ###### ###### ###### ######
+###### ###### ###### ###### ###### ###### ###### ###### ###### ######
+###### ###### ###### ###### ###### ###### ###### ###### ###### ######
 
 
 ## Next:
-* i kinda wanna try to fix the VSCode conda shell bug again ... just try for an hour or so ...
 * read about multiple importance sampling and then implement
+* perfect reflection and direct light hits
+* filter camera rays using tent or something
+
+## Next next:
 * fix all boolean checks to not use "== true" to avoid that one bug again
-
-
-
-
-* i think we need to change NEE code to use area formulation
-* we should try to learn about MIS next, because we have sampling methods ready to go
-
-## Currently working on:
-* implemented malley for cos weighted importance sampling with the duff othonormal basis
-* now let's work on sampling from lights better ...
-* this will involve what? ...
-* 
-
-* fix direct light sampling
-* implement mirror reflections
-* cosine weighted importance sampling for light surfaces
-* multiple importance sampling
-* filter camera rays
-
-## To do:
-Work through the LTE
-Figure out importance sampling and MIS
+* rename spherical light source and just have one set of light sources
 Set up BRDF class
 Set up the material class w/ proper BSDF, PDF, sampling
-Consult paper on drawing better orthonormal bases
-Set up geometry class with material, intersection, etc.
+add materials to lights, improve class structure
+geometry class allows surface sample
+material class allows direction sample
+make sphere a class, and then can add material, which can sample the spectrum or power
+geometry class with material, intersection, etc.
 
 
-
+###### ###### ###### ###### ###### ###### ###### ###### ###### ######
+###### ###### ###### ###### ###### ###### ###### ###### ###### ######
+###### ###### ###### ###### ###### ###### ###### ###### ###### ######
 
 
 ## To do:
-* implement area lighting as spheres
 * fix geometric normal calculations in triangle intersect
 * unidirectional path tracing
 * set up static scene with atmosphere and moons
@@ -67,9 +60,10 @@ Set up geometry class with material, intersection, etc.
 * make sure not dividing by 0 in ray tracing - as per feedback on A1
 * get rid of jaggies, aliasing in simple shapes, can see lines in shaded surfaces
 
-## Extensions:
-* photon mapping
 
+###### ###### ###### ###### ###### ###### ###### ###### ###### ######
+###### ###### ###### ###### ###### ###### ###### ###### ###### ######
+###### ###### ###### ###### ###### ###### ###### ###### ###### ######
 
 
 ## Questions:
@@ -100,3 +94,12 @@ Set up geometry class with material, intersection, etc.
 * im trying to understand how the sampling methods align with the mathematics fo the integral
 
 * what the eff is f
+
+* how to get realistic lighting in cornell box? always too bright ...
+
+* if i am sampling a point on the surface of the sphere, am i using surface area formulation or solid angle?
+
+
+###### ###### ###### ###### ###### ###### ###### ###### ###### ######
+###### ###### ###### ###### ###### ###### ###### ###### ###### ######
+###### ###### ###### ###### ###### ###### ###### ###### ###### ######

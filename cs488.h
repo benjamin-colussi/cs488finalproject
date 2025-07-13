@@ -76,7 +76,7 @@ std::normal_distribution<float> std_norm(mu, sigma);
 // switches
 constexpr int MAX_REFLECTION_RECURSION_DEPTH = 4;
 constexpr int MAX_REFRACTION_RECURSION_DEPTH = 4;
-constexpr int MAXIMUM_PATH_LENGTH = 2;
+constexpr int MAXIMUM_PATH_LENGTH = 10;
 constexpr bool SWORD_OF_LIGHT_AND_SHADOW = true;
 
 // sampling
