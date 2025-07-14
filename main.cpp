@@ -32,7 +32,10 @@ $ type g++-15
 
 // utilities
 inline float clamp(const float x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
-inline int toInt(const float x) { return static_cast<int>(clamp(x) * 255); }
+// inline int toInt(const float x) { return static_cast<int>(clamp(x) * 255); } // no gamma correction
+inline int toInt(const float x) { return int(pow(clamp(x), 1 / 2.2) * 255 + .5); } // with gamma correction
+
+
 
 // renderer
 int main(const int argc, const char* argv[]) {
@@ -64,16 +67,21 @@ int main(const int argc, const char* argv[]) {
 
     
     ///////////////////////////////////////////////////////////////////////////////////////////////
-    // set up lighting
-    // camera is at (0, 0, 1.5) looking to -z
-    SphericalLightSource sphericalLightSource;
-    // sphericalLightSource.centre = float3(-0.25f, 0.25f, 0.0f); // in the box
-    sphericalLightSource.centre = float3(-0.5f, 1.0f, 2.0f); // behind slightly left
-    sphericalLightSource.radius = 0.5f;
-    // sphericalLightSource.centre = float3(0.0f, 0.0f, 5.0f); // big behind :O
-    // sphericalLightSource.radius = 3.0f;
-    sphericalLightSource.power = float3(60.0f);
-    globalScene.addSphericalLightSource(&sphericalLightSource);
+    // set up lighting - camera is at (0, 0, 1.5) looking negative z
+    // float3 centre(0.0f, 0.0f, 5.0f); float radius(3.0f); // initial testing
+
+    float3 centre(-0.25f, 0.25f, -0.25f); // in the box - light a
+    // float3 centre(-0.5f, 1.0f, 2.0f); // behind slightly left - light b
+
+    float radius(0.025f);
+    // float radius(0.05f);
+    // float radius(0.5f);
+    
+    Material material;
+    material.type = LIGHT;
+    material.emission = float3(100.0f); // units = ???
+    Sphere light(centre, radius, material);
+    globalScene.addLight(&light);
     ///////////////////////////////////////////////////////////////////////////////////////////////
 
 

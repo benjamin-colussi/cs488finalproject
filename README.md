@@ -3,37 +3,32 @@
 ###### ###### ###### ###### ###### ###### ###### ###### ###### ######
 
 
+
 ## Done:
 * set up github repo
-* added smallpathtracer.cpp and got it working
-* dissected smallpathtracer.cpp
 * refactored existing renderer from base code
 * output single .ppm file
 * set up command line loading
 * switched from clion to vscode
 * got parallelization working with OpenMP
-* installed gcc and using compiler optimizations
-* we r rly flyin now !!!
-* i uninstalled anaconda so ill probs have to fix this later ...
+* installed gcc and using compiler optimizations - we r rly flyin now !!!
+* i uninstalled anaconda so ill probs have to fix this later ... womp
+
 
 ## I believe the following are working now:
-* implemented spherical area lights
+* spherical area lights
 * uniform and cosine-weighted disk malley duff hemisphere sampling - along with PDFs
-
-
-###### ###### ###### ###### ###### ###### ###### ###### ###### ######
-###### ###### ###### ###### ###### ###### ###### ###### ###### ######
-###### ###### ###### ###### ###### ###### ###### ###### ###### ######
 
 
 ## Next:
 * read about multiple importance sampling and then implement
 * perfect reflection and direct light hits
 * filter camera rays using tent or something
+* make rays constructor normalize direction automatically
 
 ## Next next:
-* fix all boolean checks to not use "== true" to avoid that one bug again
-* rename spherical light source and just have one set of light sources
+fix all boolean checks to not use "== true" to avoid that one bug again
+rename spherical light source and just have one set of light sources
 Set up BRDF class
 Set up the material class w/ proper BSDF, PDF, sampling
 add materials to lights, improve class structure
@@ -43,9 +38,11 @@ make sphere a class, and then can add material, which can sample the spectrum or
 geometry class with material, intersection, etc.
 
 
+
 ###### ###### ###### ###### ###### ###### ###### ###### ###### ######
 ###### ###### ###### ###### ###### ###### ###### ###### ###### ######
 ###### ###### ###### ###### ###### ###### ###### ###### ###### ######
+
 
 
 ## To do:
@@ -57,20 +54,17 @@ geometry class with material, intersection, etc.
 
 ## Later:
 * better OOP - multiple files for classes, separate header/implementation, etc.
-* make sure not dividing by 0 in ray tracing - as per feedback on A1
 * get rid of jaggies, aliasing in simple shapes, can see lines in shaded surfaces
 
 
+
 ###### ###### ###### ###### ###### ###### ###### ###### ###### ######
 ###### ###### ###### ###### ###### ###### ###### ###### ###### ######
 ###### ###### ###### ###### ###### ###### ###### ###### ###### ######
+
 
 
 ## Questions:
-* for path tracing, when we write the LTE as an integral over paths, do we still generate random direction rays? or should we be sampling from all the objects in scene?
-* why divide by 2 pi for uniform hemisphere? steradians? help visualizing?
-* generating cos weighted hemisphere direction in small path tracer vs pbrt?
-
 * is it possible to sample the same path twice? should we account for this?
 
 * if we sample from a BRDF for a diffuse surface, we r getting a random direction - so we use the solid angle integral?
@@ -79,25 +73,27 @@ geometry class with material, intersection, etc.
 * is this where multiple importance sampling comes in?
 
 * how to model the light itself accurately? we use wattage but im confused ...
-* should it fall off at distance increases?
-
-* a little stumped on perfect reflection ...
+* should it fall off at distance increases? or is this accounted for by geometry term? then what is L_e?
 
 * what is the reason for passing by reference? is it to not overflow?
+* multiplying by 1 / something
 
 * is the method in the lecture slides better than disk method and malley in pbr for drawing cosine weighted samples?
 
-* when drawing "samples" are we referring to drawing "paths" or "next vertices or directions" ???
-* because when we are "sampling" to estimate the integral, we are technically drawing samples from surface area or solid angle
-* in order to estimate the integrand, which 
+* when drawing "samples" are we referring to drawing "paths" or "next vertices or directions" ? because if we are drawing samples, then we need to divide by the total product of pdfs?
+wouldnt this need to be adjusted by some correlation? the paths are no longer independent ...
 * we are sampling these paths, and technically as we sample an additional vertex, we are sampling an entirely new path, which is our method of incrementally building the paths
 * im trying to understand how the sampling methods align with the mathematics fo the integral
 
-* what the eff is f
+* what is f and L and the BSDF
 
-* how to get realistic lighting in cornell box? always too bright ...
+* how to get realistic lighting in cornell box? always too bright ... calculating strength of light wrong? or maybe has to do with my MIS weighting
 
-* if i am sampling a point on the surface of the sphere, am i using surface area formulation or solid angle?
+* if i am sampling a point on the surface of the sphere, am i using surface area formulation or solid angle? can i use the same method to draw solid angle as drawing points on sphere?
+should i be using conic sampling to get a direction towards sphere area lights?
+
+* NEE: should i be keeping track of total paths and dividing by the whole thing at the end for each pixel?
+
 
 
 ###### ###### ###### ###### ###### ###### ###### ###### ###### ######

@@ -20,16 +20,16 @@ using namespace linalg::aliases;
 #include <vector>
 
 // global constants
-constexpr float Pi = 3.14159265358979f;
-constexpr float Pi_Over_2 = Pi / 2.0f;
-constexpr float Pi_Over_4 = Pi / 4.0f;
-constexpr float Pi_Inv = 1.0f / Pi;
-constexpr float Pi_2_Inv = 1.0f / (2.0f * Pi);
-constexpr float Pi_4_Inv = 1.0f / (4.0f * Pi);
-constexpr float Deg_To_Rad = Pi / 180.0f;
-constexpr float Rad_To_Deg = 180.0f / Pi;
-constexpr float Epsilon = 5e-5f;
-constexpr float Refr_Ind_Air = 1.00029f;
+constexpr float PI = 3.14159265358979f;
+constexpr float PI_OVER_TWO = PI / 2.0f;
+constexpr float PI_OVER_FOUR = PI / 4.0f;
+constexpr float ONE_OVER_PI = 1.0f / PI;
+constexpr float ONE_OVER_TWO_PI = 1.0f / (2.0f * PI);
+constexpr float ONE_OVER_FOUR_PI = 1.0f / (4.0f * PI);
+constexpr float Deg_To_Rad = PI / 180.0f;
+constexpr float Rad_To_Deg = 180.0f / PI;
+constexpr float EPSILON = 5e-5f;
+constexpr float REFR_INDEX_AIR = 1.00029f;
 
 // window size and resolution
 constexpr int globalWidth = 512;
@@ -73,13 +73,13 @@ std::random_device rd; // random seed
 std::mt19937 gen(rd()); // mersenne twister engine
 std::normal_distribution<float> std_norm(mu, sigma);
 
-// switches
+// global constants and variables
 constexpr int MAX_REFLECTION_RECURSION_DEPTH = 4;
 constexpr int MAX_REFRACTION_RECURSION_DEPTH = 4;
-constexpr int MAXIMUM_PATH_LENGTH = 10;
-constexpr bool SWORD_OF_LIGHT_AND_SHADOW = true;
+constexpr int MAXIMUM_PATH_LENGTH = 0;
 
-// sampling
+// switches
+constexpr bool SWORD_OF_LIGHT_AND_SHADOW = true;
 constexpr bool SAMPLE_UNIFORM_HEMISPHERE = false;
 constexpr bool SAMPLE_COS_WEIGHTED_HEMISPHERE = true;
 
@@ -141,10 +141,10 @@ Image globalImage(globalWidth, globalHeight);
 
 // material type
 enum MaterialType {
-	MAT_LAMBERTIAN,
-	MAT_METAL,
-	MAT_GLASS,
-	MAT_LIGHT
+	LAMBERTIAN,
+	METAL,
+	GLASS,
+	LIGHT
 };
 
 // uber material
@@ -154,13 +154,14 @@ class Material {
 
 		// fields
 		std::string name;
-		MaterialType type = MAT_LAMBERTIAN;
+		MaterialType type = LAMBERTIAN;
 		float eta = 1.0f; // index of refraction
-		float glossiness = 1.0f; // glossiness
+		float glossiness = 1.0f;
 		float3 Ka = float3(0.0f); // ambient colour
 		float3 Kd = float3(0.9f); // diffuse colour
 		float3 Ks = float3(0.0f); // specular colour
 		float Ns = 0.0; // specular exponent
+		float3 emission;
 
 		// support 8-bit texture
 		bool isTextured = false;
@@ -172,13 +173,13 @@ class Material {
 		Material() = default;
 		~Material() = default;
 		void setReflectance(const float3& c) {
-			if (type == MAT_LAMBERTIAN) {
+			if (type == LAMBERTIAN) {
 				Kd = c;
 			}
-			else if (type == MAT_METAL) {
+			else if (type == METAL) {
 				// empty
 			}
-			else if (type == MAT_GLASS) {
+			else if (type == GLASS) {
 				// empty
 			}
 		}
@@ -198,10 +199,10 @@ class Material {
 		float3 spectrum() const {
 
 			// perfect diffuse
-			if (type == MAT_LAMBERTIAN) return Kd * Pi_Inv;
+			if (type == LAMBERTIAN) return Kd * ONE_OVER_PI;
 
 			// perfect specular reflection
-			if (type == MAT_METAL) {}
+			if (type == METAL) {}
 
 			// default
 			return float3(0.0f);
@@ -211,7 +212,7 @@ class Material {
 		float3 sampleDirection(const float3& wo, const float3& n) const {
 
 			// perfect diffuse
-			if (type == MAT_LAMBERTIAN) {
+			if (type == LAMBERTIAN) {
 
 				// using normalized 3d standard normal
 				if (SAMPLE_UNIFORM_HEMISPHERE) {
@@ -232,11 +233,11 @@ class Material {
 					float theta, r;
 					if (abs(x) > abs(y)) {
 						r = x;
-						theta = Pi_Over_4 * (y / x);
+						theta = PI_OVER_FOUR * (y / x);
 					}
 					else {
 						r = y;
-						theta = Pi_Over_2 - Pi_Over_4 * (x / y);
+						theta = PI_OVER_TWO - PI_OVER_FOUR * (x / y);
 					}
 					float3 d = float3(r * cos(theta), r * sin(theta), sqrtf(1 - x * x - y * y));
 
@@ -253,7 +254,7 @@ class Material {
 			}
 
 			// perfect specular reflection
-			if (type == MAT_METAL) {
+			if (type == METAL) {
 				float3 reflection = wo - 2 * dot(wo, n) * n;
 				// if (dot(reflection, n) < 0) reflection -= 2 * dot(reflection, n) * n; // unecessary? ...
 				return normalize(reflection);
@@ -267,17 +268,17 @@ class Material {
 		float pdf(const float3& n, const float3& wi) const {
 
 			// perfect diffuse
-			if (type == MAT_LAMBERTIAN) {
+			if (type == LAMBERTIAN) {
 
 				// hemisphere subtends 2 Pi steradians
-				if (SAMPLE_UNIFORM_HEMISPHERE) return Pi_2_Inv;
+				if (SAMPLE_UNIFORM_HEMISPHERE) return ONE_OVER_TWO_PI;
 
 				// inputs must be normalized
-				else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return dot(n, wi) * Pi_Inv;
+				else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return dot(n, wi) * ONE_OVER_PI;
 			}
 
 			// perfect specular reflection
-			if (type == MAT_METAL) {}
+			if (type == METAL) {}
 
 			// default
 			return 0.0f;
@@ -516,12 +517,12 @@ class TriangleMesh {
 				for (unsigned int i = 0; i < materials.size(); i++) {
 					// convert .mlt data into BSDF definitions
 					// you may change the followings in the final project if you want
-					materials[i].type = MAT_LAMBERTIAN;
+					materials[i].type = LAMBERTIAN;
 					if (materials[i].Ns == 100.0f) {
-						materials[i].type = MAT_METAL;
+						materials[i].type = METAL;
 					}
 					if (materials[i].name.compare(0, 5, "glass", 0, 5) == 0) {
-						materials[i].type = MAT_GLASS;
+						materials[i].type = GLASS;
 						materials[i].eta = 1.5f;
 					}
 				}
@@ -1381,13 +1382,17 @@ bool BVH::traverse(HitInfo& minHit, const Ray& ray, int node_id, float tMin, flo
 
 
 // spherical light source
-class SphericalLightSource {
+class Sphere {
 
 	public:
 
 		float3 centre;
 		float radius;
-		float3 power;
+		float radiusInv;
+		Material material;
+
+		// constructor
+		Sphere(float3 c, float r, Material m): centre(c), radius(r), radiusInv(1 / r), material(m) {}
 
 		// check if ray intersects sphere
 		bool intersect(HitInfo& hitInfo, const Ray& ray, float tMin, float tMax) {
@@ -1417,6 +1422,7 @@ class SphericalLightSource {
 			hitInfo.t = t;
 			hitInfo.P = ray.o + hitInfo.t * ray.d;
 			hitInfo.G = normalize(hitInfo.P - centre);
+			hitInfo.material = &material;
 			return true;
 		}
 
@@ -1442,11 +1448,11 @@ class SphericalLightSource {
 				float theta, r;
 				if (abs(x) > abs(y)) {
 					r = x;
-					theta = Pi_Over_4 * (y / x);
+					theta = PI_OVER_FOUR * (y / x);
 				}
 				else {
 					r = y;
-					theta = Pi_Over_2 - Pi_Over_4 * (x / y);
+					theta = PI_OVER_TWO - PI_OVER_FOUR * (x / y);
 				}
 				float3 d = float3(r * cos(theta), r * sin(theta), sqrtf(1 - x * x - y * y));
 
@@ -1466,10 +1472,14 @@ class SphericalLightSource {
 		float pdf(const float3& n, const float3& wi) const {
 
 			// hemisphere subtends 2 Pi steradians
-			if (SAMPLE_UNIFORM_HEMISPHERE) return Pi_2_Inv;
+			if (SAMPLE_UNIFORM_HEMISPHERE) {
+				return ONE_OVER_TWO_PI * radiusInv * radiusInv;
+			}
 
 			// inputs must be normalized
-			else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return dot(n, wi) * Pi_Inv;
+			else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) {
+				return dot(n, wi) * ONE_OVER_PI * radiusInv * radiusInv; // second - works best
+			}
 		}
 
 };
@@ -1484,14 +1494,14 @@ class Scene {
 
 		// scene components
 		std::vector<TriangleMesh*> objects;
-		std::vector<SphericalLightSource*> sphericalLightSources;
+		std::vector<Sphere*> lights;
 		std::vector<BVH> bvhs;
 
 		// add object triangle mesh to scene
 		void addObject(TriangleMesh* pObj) { objects.push_back(pObj); }
 
 		// add spherical light source to scene
-		void addSphericalLightSource(SphericalLightSource* pObj) { sphericalLightSources.push_back(pObj); }
+		void addLight(Sphere* pObj) { lights.push_back(pObj); }
 
 		// compute BVH
 		void preCalc() {
@@ -1532,8 +1542,8 @@ class Scene {
 					}
 				}
 			}
-			for (int i = 0, i_n = static_cast<int>(sphericalLightSources.size()); i < i_n; ++i) {
-				if (sphericalLightSources[i]->intersect(tempMinHit, ray, tMin, tMax)) {
+			for (int i = 0, i_n = static_cast<int>(lights.size()); i < i_n; ++i) {
+				if (lights[i]->intersect(tempMinHit, ray, tMin, tMax)) {
 					if (tempMinHit.t < minHit.t) {
 						hit = true;
 						minHit = tempMinHit;
@@ -1625,11 +1635,11 @@ static Scene globalScene;
 // path tracing shading
 static float3 pathShader(Ray ray) {
 
-	// throughput, radiance
-	float3 beta(1.0f), L(0.0f);
+	// radiance, throughout
+	float3 L(0.0f), beta(1.0f);
 
 	// hit a mirror
-	// bool specularBounce = false;
+	bool specularBounce = false;
 
 	// trace path(s)
 	int pathLength = 0;
@@ -1638,49 +1648,33 @@ static float3 pathShader(Ray ray) {
 		// check intersection
 		HitInfo hitInfo;
 		if (globalScene.intersect(hitInfo, ray) == false) return L;
-		const float3 wo = -ray.d;
 		++pathLength;
 
-
-
-
-
-		// hit a light
-		// under construction ...
-		// gonna have to add emission to material and get a pdf for light sampling and move sample to material
-		if (hitInfo.light) {
-			// if (pathLength == 1 || specularBounce == true) {
-			// 	L += (beta * globalScene.sphericalLightSources[0]->emission * Pi_4_Inv / (hitInfo.t * hitInfo.t)); // divide by pdf?
-			// }
-
-			// return float3(1.0f, 0.0f, 1.0f);
+		// if we hit a light
+		if (hitInfo.material->type == LIGHT) {
+			if (pathLength == 1 || specularBounce) {
+				L += beta * globalScene.lights[0]->material.emission;
+			}
 			break;
-
-			// these two are the same case sort of ...
-			// if path length is 1, then the camera ray hit the light directly, just return white? or the colour of the light?
-			// if we just had a specular bounce, we should return the colour of the light or energy?
-
-			// otherwise if we hit a light, it would be after a diffuse surface anyways, which we have already done NEE for, so we can terminate the current path
 		}
 
+		// nudge the vertex along the surface normal
+		const float3 hitPoint = hitInfo.P + hitInfo.G * EPSILON;
+
+		// current ray direction from hit point
+		const float3 wo = -ray.d;
 
 
-
-
-		// maybe call the outgoing ray "wi" for consistency ???
 
 		// diffuse reflection
-		if (hitInfo.material->type == MAT_LAMBERTIAN) {
-
-			// nudge the vertex along the normal
-			float3 hitPoint = hitInfo.P + hitInfo.G * Epsilon;
+		if (hitInfo.material->type == LAMBERTIAN) {
 
 			// next event estimation of direct lighting
-			for (int i = 0, i_n = static_cast<int>(globalScene.sphericalLightSources.size()); i < i_n; ++i) {
+			for (int i = 0, i_n = static_cast<int>(globalScene.lights.size()); i < i_n; ++i) {
 
 				// calculate vector from hit to light
-				float3 lightNormal = normalize(hitPoint - globalScene.sphericalLightSources[i]->centre);
-				float3 lightPoint = globalScene.sphericalLightSources[i]->sampleSurface(lightNormal);
+				float3 lightNormal = normalize(hitPoint - globalScene.lights[i]->centre);
+				float3 lightPoint = globalScene.lights[i]->sampleSurface(lightNormal);
 				float3 hitToLight = lightPoint - hitPoint;
 
 				// trace shadow ray from hit to light
@@ -1688,34 +1682,11 @@ static float3 pathShader(Ray ray) {
 				globalScene.intersect(shadowHitInfo, Ray(hitPoint, normalize(hitToLight))); // tidy this up making use of the boolean return value
 
 				// calculate irradiance
-				if (shadowHitInfo.light) { // tidy this up making use of the boolean return value
-
-					// this approach seems to work
-					// const float falloffInv = 1 / dot(hitToLight, hitToLight);
-					// hitToLight *= sqrtf(falloffInv);
-					// const float3 irradiance = globalScene.sphericalLightSources[i]->power * Pi_4_Inv * falloffInv;
-					// const float3 numerator = beta * hitInfo.material->spectrum() * dot(hitToLight, hitInfo.G) * irradiance; // might need some work ...
-					// L += numerator / hitInfo.material->pdf(hitInfo.G, hitToLight);
-
-					// this one includes the one additional cos term from the geometry >>> darkens the image and seems more realistic based on my light values
+				if (shadowHitInfo.light) { // tidy this up making use of the boolean return value // should also be dividing by total number of lights ***
 					const float distanceSquaredInv = 1 / dot(hitToLight, hitToLight);
 					hitToLight *= sqrtf(distanceSquaredInv);
-					const float3 lightTerm = globalScene.sphericalLightSources[i]->power * Pi_4_Inv;
-					const float geometryTerm = dot(hitInfo.G, wo) * dot(hitInfo.G, hitToLight) * distanceSquaredInv;
-					L += beta * hitInfo.material->spectrum() * lightTerm * geometryTerm / globalScene.sphericalLightSources[i]->pdf(hitInfo.G, hitToLight);
-
-					// both of these still dont rly work with the light inside the box ...
-					// const float distanceSquaredInv = 1 / dot(hitToLight, hitToLight);
-					// hitToLight *= sqrtf(distanceSquaredInv);
-					// const float3 lightTerm = globalScene.sphericalLightSources[i]->power * Pi_4_Inv * distanceSquaredInv; // added the distance squared division
-					// const float geometryTerm = dot(hitInfo.G, wo) * dot(hitInfo.G, hitToLight) * distanceSquaredInv;
-					// L += beta * hitInfo.material->spectrum() * lightTerm * geometryTerm / globalScene.sphericalLightSources[i]->pdf(hitInfo.G, hitToLight); // should be dividing by number of lights?
-
-					// another one ...
-					// const float distanceSquaredInv = 1 / dot(hitToLight, hitToLight);
-					// hitToLight *= sqrtf(distanceSquaredInv);
-					// const float f = hitInfo.material->spectrum() * dot(hitInfo.G, hitToLight);
-
+					const float geometryTerm = dot(hitInfo.G, hitToLight) * dot(shadowHitInfo.G, -hitToLight) * distanceSquaredInv;
+					L += beta * hitInfo.material->spectrum() * globalScene.lights[i]->material.emission * geometryTerm / globalScene.lights[i]->pdf(shadowHitInfo.G, -hitToLight);
 				}
 			}
 
@@ -1724,13 +1695,19 @@ static float3 pathShader(Ray ray) {
 		}
 
 		// specular bounce
-		else if (hitInfo.material->type == MAT_METAL) {
-			// specularBounce = true;
-			ray = Ray(hitInfo.P + hitInfo.G + Epsilon, hitInfo.material->sampleDirection(wo, hitInfo.G));
+		else if (hitInfo.material->type == METAL) {
+			specularBounce = true;
+			ray = Ray(hitPoint, hitInfo.material->sampleDirection(wo, hitInfo.G));
 		}
 		
 		// update throughput
-		beta *= hitInfo.material->spectrum() * dot(hitInfo.G, ray.d) / hitInfo.material->pdf(hitInfo.G, ray.d); // look at this - do we have to include L ???
+		beta *= hitInfo.material->spectrum() * dot(hitInfo.G, ray.d) / hitInfo.material->pdf(hitInfo.G, ray.d);
+
+
+
+		beta *= 0.5f; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 
 		// russian roulette
 		if (pathLength > MAXIMUM_PATH_LENGTH) {
