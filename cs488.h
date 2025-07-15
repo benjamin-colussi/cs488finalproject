@@ -1603,10 +1603,6 @@ class Scene {
 							const float3 pixelPos = globalEye + globalAspectRatio * globalFilmSize * imPlaneUPos * uDir + globalFilmSize * imPlaneVPos * vDir - globalDistanceToFilm * wDir;
 
 							// trace ray through sample location
-							// under construction ...
-							// const Ray r(globalEye, normalize(pixelPos - globalEye));
-							// if (HitInfo h; intersect(h, r) == true) shade += pathShader(h, -r.d);
-							// shade += pathShader(r);
 							shade += pathShader(Ray(globalEye, normalize(pixelPos - globalEye)));
 						}
 					}
