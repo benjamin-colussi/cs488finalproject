@@ -261,3 +261,39 @@ int main(int argc, char *argv[]) {
     }
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+		// const float cosThetaMax = sqrtf(1 - light->radius * light->radius * oneOverDistanceSquared);
+		// const float cosTheta = 1 - Bertrand + Randolf * cosThetaMax;
+		// const float sinTheta = sqrtf(1 - cosTheta * cosTheta);
+		// const float phi = 2 * PI * Randolf;
+
+		// // build orthonormal basis with normal
+		// float sign = copysignf(1, lightNormal.z);
+		// const float a = -1 / (sign + lightNormal.z);
+		// const float b = lightNormal.x * lightNormal.y * a;
+		// const float3 b1 = float3(1 + sign * lightNormal.x * lightNormal.x * a, sign * b, -sign * lightNormal.x);
+		// const float3 b2 = float3(b, sign + lightNormal.y * lightNormal.y * a, -lightNormal.y);
+
+		// // centre about normal
+		// const float3 d = normalize(cosTheta * lightNormal + sinTheta * std::cos(phi) * b1 + sinTheta * std::sin(phi) * b2);

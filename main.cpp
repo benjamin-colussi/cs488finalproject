@@ -79,7 +79,7 @@ int main(const int argc, const char* argv[]) {
     
     Material material;
     material.type = LIGHT;
-    material.emission = float3(100.0f); // units = ???
+    material.emission = float3(400.0f); // units = ???
     Sphere light(centre, radius, material);
     globalScene.addLight(&light);
     ///////////////////////////////////////////////////////////////////////////////////////////////

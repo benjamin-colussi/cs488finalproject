@@ -79,9 +79,8 @@ constexpr int MAX_REFRACTION_RECURSION_DEPTH = 4;
 constexpr int MAXIMUM_PATH_LENGTH = 0;
 
 // switches
-constexpr bool SWORD_OF_LIGHT_AND_SHADOW = true;
-constexpr bool SAMPLE_UNIFORM_HEMISPHERE = false;
-constexpr bool SAMPLE_COS_WEIGHTED_HEMISPHERE = true;
+constexpr bool SAMPLE_UNIFORM_HEMISPHERE = true;
+constexpr bool SAMPLE_COS_WEIGHTED_HEMISPHERE = false;
 
 
 
@@ -1395,7 +1394,7 @@ class Sphere {
 		Sphere(float3 c, float r, Material m): centre(c), radius(r), radiusInv(1 / r), material(m) {}
 
 		// check if ray intersects sphere
-		bool intersect(HitInfo& hitInfo, const Ray& ray, float tMin, float tMax) {
+		bool intersect(HitInfo& hitInfo, const Ray& ray, float tMin, float tMax) const {
 
 			// solve quadratic vector equation
 			float3 oc = centre - ray.o;
@@ -1427,7 +1426,7 @@ class Sphere {
 		}
 
 		// generate random point on the sphere
-		float3 sampleSurface(const float3& n) {
+		float3 sampleSurface(const float3& n) const {
 
 			// using normalized 3d standard normal
 			if (SAMPLE_UNIFORM_HEMISPHERE) {
@@ -1478,7 +1477,7 @@ class Sphere {
 
 			// inputs must be normalized
 			else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) {
-				return dot(n, wi) * ONE_OVER_PI * radiusInv * radiusInv; // second - works best
+				return dot(n, wi) * ONE_OVER_PI * radiusInv * radiusInv;
 			}
 		}
 
@@ -1494,7 +1493,7 @@ class Scene {
 
 		// scene components
 		std::vector<TriangleMesh*> objects;
-		std::vector<Sphere*> lights;
+		std::vector<Sphere*> lights; // change this to list of geometry pointers
 		std::vector<BVH> bvhs;
 
 		// add object triangle mesh to scene
@@ -1547,7 +1546,6 @@ class Scene {
 					if (tempMinHit.t < minHit.t) {
 						hit = true;
 						minHit = tempMinHit;
-						minHit.light = true;
 					}
 				}
 			}
@@ -1631,90 +1629,173 @@ static Scene globalScene;
 // path tracing shading
 static float3 pathShader(Ray ray) {
 
-	// radiance, throughout
-	float3 L(0.0f), beta(1.0f);
+	// radiance, throughput
+	float3 radiance(0.0f), throughput(1.0f);
 
-	// hit a mirror
+	// hit a specular surface
 	bool specularBounce = false;
 
-	// trace path(s)
+	// multiple importance sampling weights
+	// float weightNEE, weightBRDF;
+
+	// trace path
 	int pathLength = 0;
 	while (true) {
 
 		// check intersection
 		HitInfo hitInfo;
-		if (globalScene.intersect(hitInfo, ray) == false) return L;
+		if (globalScene.intersect(hitInfo, ray) == false) return radiance;
+		const float3 hitPoint = hitInfo.P + hitInfo.G * EPSILON;
+		const float3 wo = -ray.d;
 		++pathLength;
 
-		// if we hit a light
+		// if we hit emissive surface
 		if (hitInfo.material->type == LIGHT) {
+
+			// camera ray intersection or specular hit
 			if (pathLength == 1 || specularBounce) {
-				L += beta * globalScene.lights[0]->material.emission;
-			}
-			break;
-		}
-
-		// nudge the vertex along the surface normal
-		const float3 hitPoint = hitInfo.P + hitInfo.G * EPSILON;
-
-		// current ray direction from hit point
-		const float3 wo = -ray.d;
-
-
-
-		// diffuse reflection
-		if (hitInfo.material->type == LAMBERTIAN) {
-
-			// next event estimation of direct lighting
-			for (int i = 0, i_n = static_cast<int>(globalScene.lights.size()); i < i_n; ++i) {
-
-				// calculate vector from hit to light
-				float3 lightNormal = normalize(hitPoint - globalScene.lights[i]->centre);
-				float3 lightPoint = globalScene.lights[i]->sampleSurface(lightNormal);
-				float3 hitToLight = lightPoint - hitPoint;
-
-				// trace shadow ray from hit to light
-				HitInfo shadowHitInfo;
-				globalScene.intersect(shadowHitInfo, Ray(hitPoint, normalize(hitToLight))); // tidy this up making use of the boolean return value
-
-				// calculate irradiance
-				if (shadowHitInfo.light) { // tidy this up making use of the boolean return value // should also be dividing by total number of lights ***
-					const float distanceSquaredInv = 1 / dot(hitToLight, hitToLight);
-					hitToLight *= sqrtf(distanceSquaredInv);
-					const float geometryTerm = dot(hitInfo.G, hitToLight) * dot(shadowHitInfo.G, -hitToLight) * distanceSquaredInv;
-					L += beta * hitInfo.material->spectrum() * globalScene.lights[i]->material.emission * geometryTerm / globalScene.lights[i]->pdf(shadowHitInfo.G, -hitToLight);
-				}
+				radiance += throughput * hitInfo.material->emission;
 			}
 
-			// continue path
-			ray = Ray(hitPoint, hitInfo.material->sampleDirection(wo, hitInfo.G));
+			// multiple importance sampling weighting
+			else {
+                // float p_l = lightSampler.PMF(prevIntrCtx, areaLight) * areaLight.PDF_Li(prevIntrCtx, ray.d, true);
+                // Float w_l = PowerHeuristic(1, p_b, 1, p_l);
+                // L += beta * w_l * Le;
+				// radiance += throughput * hitInfo.material->emission;
+			}
 		}
+		
+
+
+
+
+		// next event estimation
+		// randomly choose a light source to sample based on area or emission ...
+		// choosing light source k manually for now ...
+		// under construction ...
+		const int k = 0;
+		const Sphere* light = globalScene.lights[k];
+/*
+		// calculate vector from hit to light
+		const float3 lightNormal = normalize(hitPoint - light->centre);
+		float3 lightPoint = light->sampleSurface(lightNormal);
+		float3 hitToLight = lightPoint - hitPoint;
+		const float oneOverDistanceSquared = 1 / dot(hitToLight, hitToLight);
+		const float oneOverDistance = sqrtf(oneOverDistanceSquared);
+		hitToLight *= oneOverDistance;
+
+		// trace shadow ray from hit to light
+		// maybe also confirm we are hitting the same light source that we are sampling ...
+		// under construction ...
+		HitInfo shadowHitInfo;
+		if (globalScene.intersect(shadowHitInfo, Ray(hitPoint, hitToLight)) && shadowHitInfo.material->type == LIGHT) {
+
+			// check if intersection with the sampled point
+			if ((shadowHitInfo.t - EPSILON) * oneOverDistance < 1 && 1 < (shadowHitInfo.t + EPSILON) * oneOverDistance) {
+				const float geometry = dot(hitInfo.G, hitToLight) * dot(shadowHitInfo.G, -hitToLight) * oneOverDistanceSquared;
+				const float probLight = light->pdf(shadowHitInfo.G, -hitToLight);
+				// const float weight = probLight / (probLight + hitInfo.material->pdf(hitInfo.G, hitToLight));
+				radiance += throughput * hitInfo.material->spectrum() * light->material.emission * geometry / probLight;
+			}
+		}
+*/
+
+
+
+
+		// distance from centre of sphere
+		float3 lightNormal = hitPoint - light->centre;
+		const float oneOverDistanceSquared = 1 / dot(lightNormal, lightNormal);
+		const float oneOverDistance = sqrtf(oneOverDistanceSquared);
+		lightNormal *= oneOverDistance;
+
+		// build random direction within cone towards spherical light source
+		float Bertrand = PCG32::rand();
+		float Randolf = PCG32::rand();
+
+		const float sinThetaMax2 = light->radius * light->radius * oneOverDistanceSquared;
+		const float sinThetaMax = sqrtf(sinThetaMax2);
+		const float cosThetaMax = sqrtf(std::max(0.0f, 1 - sinThetaMax2));
+
+		const float cosTheta = 1 + (cosThetaMax - 1) * Bertrand;
+		const float sinTheta2 = 1 - cosTheta * cosTheta;
+
+		const float cosAlpha = sinTheta2 / sinThetaMax + cosTheta * sqrtf(1 - sinTheta2 / sinThetaMax2);
+		const float sinAlpha = sqrtf(1 - cosAlpha * cosAlpha);
+		const float phi = 2 * PI * Randolf;
+
+		// build orthonormal basis
+		float sign = copysignf(1, lightNormal.z);
+		const float a = -1 / (sign + lightNormal.z);
+		const float b = lightNormal.x * lightNormal.y * a;
+		const float3 b1 = float3(1 + sign * lightNormal.x * lightNormal.x * a, sign * b, -sign * lightNormal.x);
+		const float3 b2 = float3(b, sign + lightNormal.y * lightNormal.y * a, -lightNormal.y);
+
+		const float3 n = std::cos(phi) * sinAlpha * b1 + std::sin(phi) * sinAlpha * b2 + cosAlpha * lightNormal;
+		const float3 p = light->centre + light->radius * n;
+		const float3 d = p - hitPoint;
+		// const float tmax = length(d);
+
+
+
+		// trace shadow ray from hit to light
+		HitInfo shadowHitInfo;
+		if (globalScene.intersect(shadowHitInfo, Ray(hitPoint, normalize(d))) && shadowHitInfo.material->type == LIGHT) {
+			const float pdf = 2 * PI * (1 - cosThetaMax);
+			const float geometry = dot(hitInfo.G, d) * dot(shadowHitInfo.G, -d) * oneOverDistanceSquared;
+			radiance += throughput * hitInfo.material->spectrum() * light->material.emission * geometry * pdf;
+		}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+		// continue path
+		ray = Ray(hitPoint, hitInfo.material->sampleDirection(wo, hitInfo.G));
 
 		// specular bounce
-		else if (hitInfo.material->type == METAL) {
+		if (hitInfo.material->type == METAL) {
 			specularBounce = true;
-			ray = Ray(hitPoint, hitInfo.material->sampleDirection(wo, hitInfo.G));
 		}
 		
 		// update throughput
-		beta *= hitInfo.material->spectrum() * dot(hitInfo.G, ray.d) / hitInfo.material->pdf(hitInfo.G, ray.d);
+		throughput *= hitInfo.material->spectrum() * dot(hitInfo.G, ray.d) / hitInfo.material->pdf(hitInfo.G, ray.d);
 
 
 
-		beta *= 0.5f; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+		// Update path state variables after surface scattering ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // beta *= bs->f * AbsDot(bs->wi, isect.shading.n) / bs->pdf;
+        // p_b = bs->pdfIsProportional ? bsdf.PDF(wo, bs->wi) : bs->pdf;
+		throughput *= 0.5f; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 
 
 
 		// russian roulette
 		if (pathLength > MAXIMUM_PATH_LENGTH) {
-			float probabilityOfContinuing = std::max(beta.x, std::max(beta.y, beta.z));
-			if (PCG32::rand() < probabilityOfContinuing) beta /= probabilityOfContinuing;
+			float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
+			if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
 			else break;
 		}
 	}
 
 	// return radiance
-	return L;
+	return radiance;
 }
 
 
