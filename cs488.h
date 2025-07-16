@@ -79,8 +79,9 @@ constexpr int MAX_REFRACTION_RECURSION_DEPTH = 4;
 constexpr int MAXIMUM_PATH_LENGTH = 0;
 
 // switches
-constexpr bool SAMPLE_UNIFORM_HEMISPHERE = true;
-constexpr bool SAMPLE_COS_WEIGHTED_HEMISPHERE = false;
+constexpr bool SAMPLE_UNIFORM_HEMISPHERE = false;
+constexpr bool SAMPLE_COS_WEIGHTED_HEMISPHERE = true;
+constexpr bool SAMPLE_UNIFORM_HEMISPHERE_LIKE_A_NOOB = false;
 
 
 
@@ -240,6 +241,33 @@ class Material {
 					}
 					float3 d = float3(r * cos(theta), r * sin(theta), sqrtf(1 - x * x - y * y));
 
+					// next attempt - had some weird aliasing ...
+					// const float r = sqrtf(PCG32::rand());
+					// const float theta = 2 * PI * PCG32::rand();
+					// const float x = r * std::cos(theta);
+					// const float y = r * std::cos(theta);
+					// float3 d = float3(x, y, sqrtf(1 - x * x - y * y));
+
+					// build orthonormal basis with normal
+					float sign = copysignf(1, n.z);
+					const float a = -1 / (sign + n.z);
+					const float b = n.x * n.y * a;
+					const float3 b1 = float3(1 + sign * n.x * n.x * a, sign * b, -sign * n.x);
+					const float3 b2 = float3(b, sign + n.y * n.y * a, -n.y);
+
+					// centre about normal
+					return d.x * b1 + d.y * b2 + d.z * n;
+				}
+
+				// checking if this works ...
+				else if (SAMPLE_UNIFORM_HEMISPHERE_LIKE_A_NOOB) {
+					
+					// using spherical coordinates
+					const float z = PCG32::rand();
+					const float r = sqrtf(1 - z * z);
+					const float phi = 2 * PI * PCG32::rand();
+					const float3 d = float3(r * std::cos(phi), r * std::sin(phi), z);
+
 					// build orthonormal basis with normal
 					float sign = copysignf(1, n.z);
 					const float a = -1 / (sign + n.z);
@@ -274,6 +302,9 @@ class Material {
 
 				// inputs must be normalized
 				else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return dot(n, wi) * ONE_OVER_PI;
+
+				// checking if this works ...
+				else if (SAMPLE_UNIFORM_HEMISPHERE_LIKE_A_NOOB) return ONE_OVER_TWO_PI;
 			}
 
 			// perfect specular reflection
@@ -1440,6 +1471,8 @@ class Sphere {
 			// using malley's method
 			else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) {
 
+
+
 				// sample cos weighted positive unit hemisphere
 				float x = 2 * PCG32::rand() - 1;
 				float y = 2 * PCG32::rand() - 1;
@@ -1454,6 +1487,33 @@ class Sphere {
 					theta = PI_OVER_TWO - PI_OVER_FOUR * (x / y);
 				}
 				float3 d = float3(r * cos(theta), r * sin(theta), sqrtf(1 - x * x - y * y));
+
+				// next attempt
+				// const float r = sqrtf(PCG32::rand());
+				// const float theta = 2 * PI * PCG32::rand();
+				// const float x = r * std::cos(theta);
+				// const float y = r * std::cos(theta);
+				// float3 d = float3(x, y, sqrtf(1 - x * x - y * y));
+
+				// build orthonormal basis with normal
+				float sign = copysignf(1, n.z);
+				const float a = -1 / (sign + n.z);
+				const float b = n.x * n.y * a;
+				const float3 b1 = float3(1 + sign * n.x * n.x * a, sign * b, -sign * n.x);
+				const float3 b2 = float3(b, sign + n.y * n.y * a, -n.y);
+
+				// centre about normal
+				return centre + radius * (d.x * b1 + d.y * b2 + d.z * n);
+			}
+
+			// checking if this works ...
+			else if (SAMPLE_UNIFORM_HEMISPHERE_LIKE_A_NOOB) {
+				
+				// using spherical coordinates
+				const float z = PCG32::rand();
+				const float r = sqrtf(1 - z * z);
+				const float phi = 2 * PI * PCG32::rand();
+				const float3 d = float3(r * std::cos(phi), r * std::sin(phi), z);
 
 				// build orthonormal basis with normal
 				float sign = copysignf(1, n.z);
@@ -1471,14 +1531,13 @@ class Sphere {
 		float pdf(const float3& n, const float3& wi) const {
 
 			// hemisphere subtends 2 Pi steradians
-			if (SAMPLE_UNIFORM_HEMISPHERE) {
-				return ONE_OVER_TWO_PI * radiusInv * radiusInv;
-			}
+			if (SAMPLE_UNIFORM_HEMISPHERE) return ONE_OVER_TWO_PI * radiusInv * radiusInv;
 
 			// inputs must be normalized
-			else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) {
-				return dot(n, wi) * ONE_OVER_PI * radiusInv * radiusInv;
-			}
+			else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return dot(n, wi) * ONE_OVER_PI * radiusInv * radiusInv;
+
+			// checking if this works ...
+			else if (SAMPLE_UNIFORM_HEMISPHERE_LIKE_A_NOOB) return ONE_OVER_TWO_PI * radiusInv * radiusInv;
 		}
 
 };
@@ -1635,7 +1694,7 @@ static float3 pathShader(Ray ray) {
 	// hit a specular surface
 	bool specularBounce = false;
 
-	// multiple importance sampling weights
+	// multiple importance sampling
 	// float weightNEE, weightBRDF;
 
 	// trace path
@@ -1649,7 +1708,7 @@ static float3 pathShader(Ray ray) {
 		const float3 wo = -ray.d;
 		++pathLength;
 
-		// if we hit emissive surface
+		// hit emissive surface
 		if (hitInfo.material->type == LIGHT) {
 
 			// camera ray intersection or specular hit
@@ -1657,7 +1716,7 @@ static float3 pathShader(Ray ray) {
 				radiance += throughput * hitInfo.material->emission;
 			}
 
-			// multiple importance sampling weighting
+			// multiple importance sampling
 			else {
                 // float p_l = lightSampler.PMF(prevIntrCtx, areaLight) * areaLight.PDF_Li(prevIntrCtx, ray.d, true);
                 // Float w_l = PowerHeuristic(1, p_b, 1, p_l);
@@ -1676,8 +1735,8 @@ static float3 pathShader(Ray ray) {
 		// under construction ...
 		const int k = 0;
 		const Sphere* light = globalScene.lights[k];
-/*
-		// calculate vector from hit to light
+
+		// sample surface of light source
 		const float3 lightNormal = normalize(hitPoint - light->centre);
 		float3 lightPoint = light->sampleSurface(lightNormal);
 		float3 hitToLight = lightPoint - hitPoint;
@@ -1692,75 +1751,14 @@ static float3 pathShader(Ray ray) {
 		if (globalScene.intersect(shadowHitInfo, Ray(hitPoint, hitToLight)) && shadowHitInfo.material->type == LIGHT) {
 
 			// check if intersection with the sampled point
-			if ((shadowHitInfo.t - EPSILON) * oneOverDistance < 1 && 1 < (shadowHitInfo.t + EPSILON) * oneOverDistance) {
+			// if ((shadowHitInfo.t - EPSILON) * oneOverDistance < 1 && 1 < (shadowHitInfo.t + EPSILON) * oneOverDistance) {
 				const float geometry = dot(hitInfo.G, hitToLight) * dot(shadowHitInfo.G, -hitToLight) * oneOverDistanceSquared;
 				const float probLight = light->pdf(shadowHitInfo.G, -hitToLight);
 				// const float weight = probLight / (probLight + hitInfo.material->pdf(hitInfo.G, hitToLight));
 				radiance += throughput * hitInfo.material->spectrum() * light->material.emission * geometry / probLight;
-			}
+				// radiance += 0.5f * throughput * hitInfo.material->spectrum() * light->material.emission * geometry / probLight;
+			// }
 		}
-*/
-
-
-
-
-		// distance from centre of sphere
-		float3 lightNormal = hitPoint - light->centre;
-		const float oneOverDistanceSquared = 1 / dot(lightNormal, lightNormal);
-		const float oneOverDistance = sqrtf(oneOverDistanceSquared);
-		lightNormal *= oneOverDistance;
-
-		// build random direction within cone towards spherical light source
-		float Bertrand = PCG32::rand();
-		float Randolf = PCG32::rand();
-
-		const float sinThetaMax2 = light->radius * light->radius * oneOverDistanceSquared;
-		const float sinThetaMax = sqrtf(sinThetaMax2);
-		const float cosThetaMax = sqrtf(std::max(0.0f, 1 - sinThetaMax2));
-
-		const float cosTheta = 1 + (cosThetaMax - 1) * Bertrand;
-		const float sinTheta2 = 1 - cosTheta * cosTheta;
-
-		const float cosAlpha = sinTheta2 / sinThetaMax + cosTheta * sqrtf(1 - sinTheta2 / sinThetaMax2);
-		const float sinAlpha = sqrtf(1 - cosAlpha * cosAlpha);
-		const float phi = 2 * PI * Randolf;
-
-		// build orthonormal basis
-		float sign = copysignf(1, lightNormal.z);
-		const float a = -1 / (sign + lightNormal.z);
-		const float b = lightNormal.x * lightNormal.y * a;
-		const float3 b1 = float3(1 + sign * lightNormal.x * lightNormal.x * a, sign * b, -sign * lightNormal.x);
-		const float3 b2 = float3(b, sign + lightNormal.y * lightNormal.y * a, -lightNormal.y);
-
-		const float3 n = std::cos(phi) * sinAlpha * b1 + std::sin(phi) * sinAlpha * b2 + cosAlpha * lightNormal;
-		const float3 p = light->centre + light->radius * n;
-		const float3 d = p - hitPoint;
-		// const float tmax = length(d);
-
-
-
-		// trace shadow ray from hit to light
-		HitInfo shadowHitInfo;
-		if (globalScene.intersect(shadowHitInfo, Ray(hitPoint, normalize(d))) && shadowHitInfo.material->type == LIGHT) {
-			const float pdf = 2 * PI * (1 - cosThetaMax);
-			const float geometry = dot(hitInfo.G, d) * dot(shadowHitInfo.G, -d) * oneOverDistanceSquared;
-			radiance += throughput * hitInfo.material->spectrum() * light->material.emission * geometry * pdf;
-		}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 		// continue path
 		ray = Ray(hitPoint, hitInfo.material->sampleDirection(wo, hitInfo.G));
@@ -1771,6 +1769,7 @@ static float3 pathShader(Ray ray) {
 		}
 		
 		// update throughput
+		// throughput *= hitInfo.material->spectrum() * dot(hitInfo.G, ray.d) / hitInfo.material->pdf(hitInfo.G, ray.d);
 		throughput *= hitInfo.material->spectrum() * dot(hitInfo.G, ray.d) / hitInfo.material->pdf(hitInfo.G, ray.d);
 
 

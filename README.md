@@ -99,3 +99,13 @@ should i be using conic sampling to get a direction towards sphere area lights?
 ###### ###### ###### ###### ###### ###### ###### ###### ###### ######
 ###### ###### ###### ###### ###### ###### ###### ###### ###### ######
 ###### ###### ###### ###### ###### ###### ###### ###### ###### ######
+
+
+
+
+
+
+
+i normalized the output from the cos weighted surface sampler and it seems to fix the check - but get black spots now
+normalizing the putput from the cos weighted direction sampler didnt do anything
+i kinda wanna scrap my cos weighted surface sampler ...
