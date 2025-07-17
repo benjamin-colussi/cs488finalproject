@@ -29,7 +29,7 @@
 * MIS - might have an issue - not sure if weights are summing to 1 - doesnt rly seem to reduce variance - is this because of only diffuse surfaces?
 
 ## Next:
-* just check if MIS works better with conic sampling
+* just check if MIS works better with conic sampling - it seems to work the same? so i guess ive implemented it properly?
 * also is my RR cutting at the correct point?
 * perfect reflection
 * perfect refraction
