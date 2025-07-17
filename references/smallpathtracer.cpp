@@ -281,7 +281,7 @@ int main(int argc, char *argv[]) {
 
 
 
-
+// SMALL PT METHOD FOR GETTING RANDOM DIRECTION TO SPHERE LIGHT
 
 // const float cosThetaMax = sqrtf(1 - light->radius * light->radius * oneOverDistanceSquared);
 // const float cosTheta = 1 - Bertrand + Randolf * cosThetaMax;
@@ -307,7 +307,7 @@ int main(int argc, char *argv[]) {
 
 
 
-
+// SAMPLE COSINE WEIGHTED HEMISPHERE
 
 // // using malley's method
 // else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) {
@@ -352,6 +352,8 @@ int main(int argc, char *argv[]) {
 
 
 
+// FIRST ATTEMP AT NEE
+
 // // calculate vector from hit to light
 // const float3 lightNormal = normalize(hitPoint - light->centre);
 // float3 lightPoint = light->sampleSurface(lightNormal);
@@ -387,53 +389,69 @@ int main(int argc, char *argv[]) {
 
 
 
+// BUILDING CONIC SAMPLE TOWARDS SURFACE OF SPHERE LIGHT
+
+// // distance from centre of spherical light
+// // float3 lightNormal = hitPoint - light->centre;
+// float3 lightNormal = light->centre - hitPoint;
+// float oneOverDistanceSquared = 1 / dot(lightNormal, lightNormal);
+// lightNormal *= sqrtf(oneOverDistanceSquared);
+
+// // random direction in cone of spherical light
+// // const float sinThetaMax2 = light->radius * light->radius * oneOverDistanceSquared;
+// // const float sinThetaMax = sqrtf(sinThetaMax2);
+// // const float cosThetaMax = sqrtf(std::max(0.0f, 1 - sinThetaMax2));
+// // const float cosTheta = 1 + (cosThetaMax - 1) * PCG32::rand();
+// // const float sinTheta2 = 1 - cosTheta * cosTheta;
+// // const float cosAlpha = sinTheta2 / sinThetaMax + cosTheta * sqrtf(1 - sinTheta2 / sinThetaMax2);
+// // const float sinAlpha = sqrtf(1 - cosAlpha * cosAlpha);
+// // const float phi = 2 * PI * PCG32::rand();
+
+// const float Bertrand = PCG32::rand();
+// const float Randolf = PCG32::rand();
+// const float cosThetaMax = sqrtf(1 - light->radius * light->radius * oneOverDistanceSquared);
+// const float cosTheta = 1 - Bertrand + Randolf * cosThetaMax;
+// const float sinTheta = sqrtf(1 - cosTheta * cosTheta);
+// const float phi = 2 * PI * Randolf;
+
+// // build orthonormal basis
+// float sign = copysignf(1, lightNormal.z);
+// const float a = -1 / (sign + lightNormal.z);
+// const float b = lightNormal.x * lightNormal.y * a;
+// const float3 b1 = float3(1 + sign * lightNormal.x * lightNormal.x * a, sign * b, -sign * lightNormal.x);
+// const float3 b2 = float3(b, sign + lightNormal.y * lightNormal.y * a, -lightNormal.y);
+
+// // centre about normal
+// // const float3 lightPointNormal = cosAlpha * lightNormal + sinAlpha * std::cos(phi) * b1 + sinAlpha * std::sin(phi) * b2;
+// // const float3 lightPoint = light->centre + light->radius * lightPointNormal;
+// // float3 wi = lightPoint - hitPoint;
+// // oneOverDistanceSquared = 1 / dot(wi, wi);
+// // wi *= sqrtf(oneOverDistanceSquared);
+
+// // const float tmax = length(d); // use this to clamp intersection routine
+// const float3 wi = cosTheta * lightNormal + sinTheta * std::cos(phi) * b1 + sinTheta * std::sin(phi) * b2;
+
+// // trace shadow ray from hit to light
+// HitInfo shadowHitInfo;
+// if (globalScene.intersect(shadowHitInfo, Ray(hitPoint, wi)) && shadowHitInfo.material->type == LIGHT) {
+// 	const float pdf = 2 * PI * (1 - cosThetaMax);
+// 	// const float geometry = dot(hitInfo.G, wi) * dot(lightPointNormal, -wi) * oneOverDistanceSquared;
+// 	const float geometry = dot(hitInfo.G, wi) * dot(shadowHitInfo.G, -wi) / (shadowHitInfo.t * shadowHitInfo.t);
+// 	radiance += 0.5f * throughput * hitInfo.material->spectrum() * light->material.emission * geometry * pdf;
+// }
 
 
-// distance from centre of spherical light
-		// float3 lightNormal = hitPoint - light->centre;
-		float3 lightNormal = light->centre - hitPoint;
-		float oneOverDistanceSquared = 1 / dot(lightNormal, lightNormal);
-		lightNormal *= sqrtf(oneOverDistanceSquared);
 
-		// random direction in cone of spherical light
-		// const float sinThetaMax2 = light->radius * light->radius * oneOverDistanceSquared;
-		// const float sinThetaMax = sqrtf(sinThetaMax2);
-		// const float cosThetaMax = sqrtf(std::max(0.0f, 1 - sinThetaMax2));
-		// const float cosTheta = 1 + (cosThetaMax - 1) * PCG32::rand();
-		// const float sinTheta2 = 1 - cosTheta * cosTheta;
-		// const float cosAlpha = sinTheta2 / sinThetaMax + cosTheta * sqrtf(1 - sinTheta2 / sinThetaMax2);
-		// const float sinAlpha = sqrtf(1 - cosAlpha * cosAlpha);
-		// const float phi = 2 * PI * PCG32::rand();
 
-		const float Bertrand = PCG32::rand();
-		const float Randolf = PCG32::rand();
-		const float cosThetaMax = sqrtf(1 - light->radius * light->radius * oneOverDistanceSquared);
-		const float cosTheta = 1 - Bertrand + Randolf * cosThetaMax;
-		const float sinTheta = sqrtf(1 - cosTheta * cosTheta);
-		const float phi = 2 * PI * Randolf;
 
-		// build orthonormal basis
-		float sign = copysignf(1, lightNormal.z);
-		const float a = -1 / (sign + lightNormal.z);
-		const float b = lightNormal.x * lightNormal.y * a;
-		const float3 b1 = float3(1 + sign * lightNormal.x * lightNormal.x * a, sign * b, -sign * lightNormal.x);
-		const float3 b2 = float3(b, sign + lightNormal.y * lightNormal.y * a, -lightNormal.y);
 
-		// centre about normal
-		// const float3 lightPointNormal = cosAlpha * lightNormal + sinAlpha * std::cos(phi) * b1 + sinAlpha * std::sin(phi) * b2;
-		// const float3 lightPoint = light->centre + light->radius * lightPointNormal;
-		// float3 wi = lightPoint - hitPoint;
-		// oneOverDistanceSquared = 1 / dot(wi, wi);
-		// wi *= sqrtf(oneOverDistanceSquared);
 
-		// const float tmax = length(d); // use this to clamp intersection routine
-		const float3 wi = cosTheta * lightNormal + sinTheta * std::cos(phi) * b1 + sinTheta * std::sin(phi) * b2;
 
-		// trace shadow ray from hit to light
-		HitInfo shadowHitInfo;
-		if (globalScene.intersect(shadowHitInfo, Ray(hitPoint, wi)) && shadowHitInfo.material->type == LIGHT) {
-			const float pdf = 2 * PI * (1 - cosThetaMax);
-			// const float geometry = dot(hitInfo.G, wi) * dot(lightPointNormal, -wi) * oneOverDistanceSquared;
-			const float geometry = dot(hitInfo.G, wi) * dot(shadowHitInfo.G, -wi) / (shadowHitInfo.t * shadowHitInfo.t);
-			radiance += 0.5f * throughput * hitInfo.material->spectrum() * light->material.emission * geometry * pdf;
-		}
+// SAMPLE UNIT DISK - BUT NOT CONCENTRICALLY
+
+// next attempt
+// const float r = sqrtf(PCG32::rand());
+// const float theta = 2 * PI * PCG32::rand();
+// const float x = r * std::cos(theta);
+// const float y = r * std::cos(theta);
+// float3 d = float3(x, y, sqrtf(1 - x * x - y * y));

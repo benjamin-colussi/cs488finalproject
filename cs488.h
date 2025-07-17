@@ -241,13 +241,6 @@ class Material {
 					}
 					float3 d = float3(r * cos(theta), r * sin(theta), sqrtf(1 - x * x - y * y));
 
-					// next attempt - had some weird aliasing ...
-					// const float r = sqrtf(PCG32::rand());
-					// const float theta = 2 * PI * PCG32::rand();
-					// const float x = r * std::cos(theta);
-					// const float y = r * std::cos(theta);
-					// float3 d = float3(x, y, sqrtf(1 - x * x - y * y));
-
 					// build orthonormal basis with normal
 					float sign = copysignf(1, n.z);
 					const float a = -1 / (sign + n.z);
@@ -350,8 +343,6 @@ class HitInfo {
 
 		float3 G; // geometric normal
 		bool front; // hit front or back
-
-		bool light = false; // hit light
 
 };
 
@@ -1471,8 +1462,6 @@ class Sphere {
 			// using malley's method
 			else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) {
 
-
-
 				// sample cos weighted positive unit hemisphere
 				float x = 2 * PCG32::rand() - 1;
 				float y = 2 * PCG32::rand() - 1;
@@ -1487,13 +1476,6 @@ class Sphere {
 					theta = PI_OVER_TWO - PI_OVER_FOUR * (x / y);
 				}
 				float3 d = float3(r * cos(theta), r * sin(theta), sqrtf(1 - x * x - y * y));
-
-				// next attempt
-				// const float r = sqrtf(PCG32::rand());
-				// const float theta = 2 * PI * PCG32::rand();
-				// const float x = r * std::cos(theta);
-				// const float y = r * std::cos(theta);
-				// float3 d = float3(x, y, sqrtf(1 - x * x - y * y));
 
 				// build orthonormal basis with normal
 				float sign = copysignf(1, n.z);
@@ -1691,11 +1673,12 @@ static float3 pathShader(Ray ray) {
 	// radiance, throughput
 	float3 radiance(0.0f), throughput(1.0f);
 
-	// hit a specular surface
-	bool specularBounce = false;
-
 	// multiple importance sampling
-	// float weightNEE, weightBRDF;
+	float probBRDF = 0.0f;
+	float cosThetaMax;
+
+	// hit specular material
+	bool specular = false;
 
 	// trace path
 	int pathLength = 0;
@@ -1703,41 +1686,98 @@ static float3 pathShader(Ray ray) {
 
 		// check intersection
 		HitInfo hitInfo;
-		if (globalScene.intersect(hitInfo, ray) == false) return radiance;
+		if (globalScene.intersect(hitInfo, ray) == false) break;
 		const float3 hitPoint = hitInfo.P + hitInfo.G * EPSILON;
 		const float3 wo = -ray.d;
 		++pathLength;
 
+		// next event estimation
+		const int k = 0;
+		const Sphere* light = globalScene.lights[k];
+		// const float3 lightNormal = normalize(hitPoint - light->centre);
+
 		// hit emissive surface
 		if (hitInfo.material->type == LIGHT) {
 
-			// camera ray intersection or specular hit
-			if (pathLength == 1 || specularBounce) {
-				radiance += throughput * hitInfo.material->emission;
-			}
+			// camera ray intersection or hit specular material
+			if (pathLength == 1 || specular) radiance += throughput * hitInfo.material->emission;
 
 			// multiple importance sampling
 			else {
-                // float p_l = lightSampler.PMF(prevIntrCtx, areaLight) * areaLight.PDF_Li(prevIntrCtx, ray.d, true);
-                // Float w_l = PowerHeuristic(1, p_b, 1, p_l);
-                // L += beta * w_l * Le;
-				// radiance += throughput * hitInfo.material->emission;
+				// throughput *= probBRDF / (probBRDF + light->pdf(lightNormal, hitInfo.G));
+				throughput *= probBRDF / (probBRDF + (1 / (2 * PI * (1 - cosThetaMax))));
+				radiance += throughput * hitInfo.material->emission;
 			}
 		}
-		
 
 
 
 
-		// next event estimation
-		// randomly choose a light source to sample based on area or emission ...
-		// choosing light source k manually for now ...
-		// under construction ...
-		const int k = 0;
-		const Sphere* light = globalScene.lights[k];
 
+		// distance from centre of spherical light
+		// float3 lightNormal = hitPoint - light->centre;
+		float3 lightNormal = light->centre - hitPoint;
+		float oneOverDistanceSquared = 1 / dot(lightNormal, lightNormal);
+		lightNormal *= sqrtf(oneOverDistanceSquared);
+
+		// random friends
+		const float Bertrand = PCG32::rand();
+		const float Randolf = PCG32::rand();
+
+		// random direction in cone of spherical light
+		// const float sinThetaMax2 = light->radius * light->radius * oneOverDistanceSquared;
+		// const float sinThetaMax = sqrtf(sinThetaMax2);
+		cosThetaMax = sqrtf(std::max(0.0f, 1 - light->radius * light->radius * oneOverDistanceSquared));
+		const float cosTheta = 1 + (cosThetaMax - 1) * Bertrand;
+		// const float sinTheta2 = 1 - cosTheta * cosTheta;
+		const float sinTheta = sqrtf(1 - cosTheta * cosTheta);
+		// const float cosAlpha = sinTheta2 / sinThetaMax + cosTheta * sqrtf(1 - sinTheta2 / sinThetaMax2);
+		// const float sinAlpha = sqrtf(1 - cosAlpha * cosAlpha);
+		const float phi = 2 * PI * Randolf;
+
+		// const float cosThetaMax = sqrtf(1 - light->radius * light->radius * oneOverDistanceSquared);
+		// const float cosTheta = 1 - Bertrand + Randolf * cosThetaMax;
+		// const float sinTheta = sqrtf(1 - cosTheta * cosTheta);
+		// const float phi = 2 * PI * Randolf;
+
+		// float cos_theta = std::lerp(r1, cos_theta_max, 1.f);
+		// float sin_theta = std::sqrt(1.f - cos_theta * cos_theta);
+		// float phi = 2 * M_PI * r2;
+		// return std::cos(phi) * sin_theta * x + std::sin(phi) * sin_theta * y + cos_theta * z;
+
+		// build orthonormal basis
+		float sign = copysignf(1, lightNormal.z);
+		const float a = -1 / (sign + lightNormal.z);
+		const float b = lightNormal.x * lightNormal.y * a;
+		const float3 b1 = float3(1 + sign * lightNormal.x * lightNormal.x * a, sign * b, -sign * lightNormal.x);
+		const float3 b2 = float3(b, sign + lightNormal.y * lightNormal.y * a, -lightNormal.y);
+
+		// centre about normal
+		// const float3 lightPointNormal = cosAlpha * lightNormal + sinAlpha * std::cos(phi) * b1 + sinAlpha * std::sin(phi) * b2;
+		// const float3 lightPoint = light->centre + light->radius * lightPointNormal;
+		// float3 wi = lightPoint - hitPoint;
+		// oneOverDistanceSquared = 1 / dot(wi, wi);
+		// wi *= sqrtf(oneOverDistanceSquared);
+
+		const float3 wi = cosTheta * lightNormal + sinTheta * std::cos(phi) * b1 + sinTheta * std::sin(phi) * b2;
+
+		// trace shadow ray from hit to light
+		HitInfo shadowHitInfo;
+		if (globalScene.intersect(shadowHitInfo, Ray(hitPoint, wi)) && shadowHitInfo.material->type == LIGHT) {
+			
+			const float probLight = 1 / (2 * PI * (1 - cosThetaMax));
+			const float weight = probLight / (probLight + hitInfo.material->pdf(hitInfo.G, wi));
+
+			// const float geometry = dot(hitInfo.G, wi) * dot(lightPointNormal, -wi) * oneOverDistanceSquared;
+			// radiance += weight * throughput * hitInfo.material->spectrum() * light->material.emission * geometry / probLight;
+
+			radiance += weight * throughput * hitInfo.material->spectrum() * light->material.emission * dot(hitInfo.G, wi) / probLight; // looks much better without geometry term
+		}
+
+
+
+/*
 		// sample surface of light source
-		const float3 lightNormal = normalize(hitPoint - light->centre);
 		float3 lightPoint = light->sampleSurface(lightNormal);
 		float3 hitToLight = lightPoint - hitPoint;
 		const float oneOverDistanceSquared = 1 / dot(hitToLight, hitToLight);
@@ -1745,45 +1785,27 @@ static float3 pathShader(Ray ray) {
 		hitToLight *= oneOverDistance;
 
 		// trace shadow ray from hit to light
-		// maybe also confirm we are hitting the same light source that we are sampling ...
-		// under construction ...
 		HitInfo shadowHitInfo;
 		if (globalScene.intersect(shadowHitInfo, Ray(hitPoint, hitToLight)) && shadowHitInfo.material->type == LIGHT) {
 
 			// check if intersection with the sampled point
-			// if ((shadowHitInfo.t - EPSILON) * oneOverDistance < 1 && 1 < (shadowHitInfo.t + EPSILON) * oneOverDistance) {
+			if (dot(hitToLight, normalize(lightPoint - light->centre))) {
+				const float probLight = light->pdf(lightNormal, shadowHitInfo.G);
+				const float weight = probLight / (probLight + hitInfo.material->pdf(hitInfo.G, hitToLight));
 				const float geometry = dot(hitInfo.G, hitToLight) * dot(shadowHitInfo.G, -hitToLight) * oneOverDistanceSquared;
-				const float probLight = light->pdf(shadowHitInfo.G, -hitToLight);
-				// const float weight = probLight / (probLight + hitInfo.material->pdf(hitInfo.G, hitToLight));
-				radiance += throughput * hitInfo.material->spectrum() * light->material.emission * geometry / probLight;
-				// radiance += 0.5f * throughput * hitInfo.material->spectrum() * light->material.emission * geometry / probLight;
-			// }
+				radiance += weight * throughput * hitInfo.material->spectrum() * light->material.emission * geometry / probLight;
+			}
 		}
+*/
+
+
 
 		// continue path
 		ray = Ray(hitPoint, hitInfo.material->sampleDirection(wo, hitInfo.G));
 
-		// specular bounce
-		if (hitInfo.material->type == METAL) {
-			specularBounce = true;
-		}
-		
 		// update throughput
-		// throughput *= hitInfo.material->spectrum() * dot(hitInfo.G, ray.d) / hitInfo.material->pdf(hitInfo.G, ray.d);
-		throughput *= hitInfo.material->spectrum() * dot(hitInfo.G, ray.d) / hitInfo.material->pdf(hitInfo.G, ray.d);
-
-
-
-
-
-		// Update path state variables after surface scattering ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // beta *= bs->f * AbsDot(bs->wi, isect.shading.n) / bs->pdf;
-        // p_b = bs->pdfIsProportional ? bsdf.PDF(wo, bs->wi) : bs->pdf;
-		throughput *= 0.5f; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-
+		const float probBRDF = hitInfo.material->pdf(hitInfo.G, ray.d);
+		throughput *= hitInfo.material->spectrum() * dot(hitInfo.G, ray.d) / probBRDF;
 
 		// russian roulette
 		if (pathLength > MAXIMUM_PATH_LENGTH) {
