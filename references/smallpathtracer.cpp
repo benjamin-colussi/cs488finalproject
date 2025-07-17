@@ -8,8 +8,6 @@
 #include <string>
 #include <cmath>
 
-
-
 struct Vec {
 	double x, y, z;
 	Vec(double x_ = 0, double y_ = 0, double z_ = 0) { x = x_; y = y_; z = z_; }
@@ -69,8 +67,8 @@ Sphere spheres[] = {
 	Sphere(1e5, Vec(50,-1e5+81.6,81.6), Vec(), Vec(.75,.75,.75), DIFFUSE),
 
 	// balls
-	Sphere(16.5, Vec(27,16.5,47), Vec(), Vec(1,1,1) * .999, SPECULAR),
-	Sphere(16.5, Vec(73,16.5,78), Vec(), Vec(1,1,1) * .999, SPECULAR),
+	Sphere(16.5, Vec(27,16.5,47), Vec(), Vec(1,1,1) * .999, DIFFUSE),
+	Sphere(16.5, Vec(73,16.5,78), Vec(), Vec(1,1,1) * .999, DIFFUSE),
 
 	// light
 	Sphere(1.5, Vec(50,81.6-16.5,81.6), Vec(4,4,4) * 100, Vec(), DIFFUSE),
@@ -93,10 +91,6 @@ inline bool intersect(const Ray& r, double& t, int& id) {
 	return t < inf;
 }
 
-
-
-
-
 // shade
 Vec radiance(const Ray& r, int depth, unsigned short* Xi, int E = 1) {
 
@@ -113,12 +107,12 @@ Vec radiance(const Ray& r, int depth, unsigned short* Xi, int E = 1) {
 	Vec f = obj.colour; // object colour, BRDF modulator
 
 	// max reflection using russian roulette
-	double p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z; // takes max value
-	if (++depth > 5 || !p) {
-		if (erand48(Xi) < p) f = f * (1 / p);
-		else return obj.emission * E;
-	}
-
+	// double prob = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z; // takes max value
+	// if (++depth > 5 || !prob) {
+	// 	if (erand48(Xi) < prob) f = f * (1 / prob);
+	// 	else return obj.emission * E;
+	// }
+	if (++depth > 5) return obj.emission * E;
 
 
 	// ideal diffuse reflection
@@ -143,6 +137,10 @@ Vec radiance(const Ray& r, int depth, unsigned short* Xi, int E = 1) {
 			double phi = 2 * M_PI * eps2;
 			Vec l = su * cos(phi) * sin_a + sv * sin(phi) * sin_a + sw * cos_a;
 			l.norm();
+
+			// double cos_a = 1-eps1+eps1*cos_a_max;
+			// double sin_a = sqrt(1-cos_a*cos_a);
+			// double phi = 2*M_PI*eps2;
 
 			// trace shadow ray, check if the connection is not blocked
 			if (intersect(Ray(x, l), t, id) && id == i) {
@@ -172,26 +170,22 @@ Vec radiance(const Ray& r, int depth, unsigned short* Xi, int E = 1) {
 
 
 
-	// ideal dielectric refraction
-	Ray reflRay(x, r.d-n*2*n.dot(r.d));
-	bool into = n.dot(nl)>0;                // Ray from outside going in?
-	double nc=1, nt=1.5, nnt=into?nc/nt:nt/nc, ddn=r.d.dot(nl), cos2t;
+	// // ideal dielectric refraction
+	// Ray reflRay(x, r.d-n*2*n.dot(r.d));
+	// bool into = n.dot(nl)>0;                // Ray from outside going in?
+	// double nc=1, nt=1.5, nnt=into?nc/nt:nt/nc, ddn=r.d.dot(nl), cos2t;
 
-	// total internal reflection
-	if ((cos2t=1-nnt*nnt*(1-ddn*ddn))<0) return obj.emission + f.mult(radiance(reflRay,depth,Xi));
+	// // total internal reflection
+	// if ((cos2t=1-nnt*nnt*(1-ddn*ddn))<0) return obj.emission + f.mult(radiance(reflRay,depth,Xi));
 
-	// no total internal reflection
-	Vec tdir = (r.d*nnt - n*((into?1:-1)*(ddn*nnt+sqrt(cos2t)))).norm();
-	double a=nt-nc, b=nt+nc, R0=a*a/(b*b), c = 1-(into?-ddn:tdir.dot(n));
-	double Re=R0+(1-R0)*c*c*c*c*c,Tr=1-Re,P=.25+.5*Re,RP=Re/P,TP=Tr/(1-P);
-	return obj.emission + f.mult(depth>2 ? (erand48(Xi)<P ?   // Russian roulette
-	radiance(reflRay,depth,Xi)*RP:radiance(Ray(x,tdir),depth,Xi)*TP) :
-	radiance(reflRay,depth,Xi)*Re+radiance(Ray(x,tdir),depth,Xi)*Tr);
+	// // no total internal reflection
+	// Vec tdir = (r.d*nnt - n*((into?1:-1)*(ddn*nnt+sqrt(cos2t)))).norm();
+	// double a=nt-nc, b=nt+nc, R0=a*a/(b*b), c = 1-(into?-ddn:tdir.dot(n));
+	// double Re=R0+(1-R0)*c*c*c*c*c,Tr=1-Re,P=.25+.5*Re,RP=Re/P,TP=Tr/(1-P);
+	// return obj.emission + f.mult(depth>2 ? (erand48(Xi)<P ?   // Russian roulette
+	// radiance(reflRay,depth,Xi)*RP:radiance(Ray(x,tdir),depth,Xi)*TP) :
+	// radiance(reflRay,depth,Xi)*Re+radiance(Ray(x,tdir),depth,Xi)*Tr);
 }
-
-
-
-
 
 // path tracer
 int main(int argc, char *argv[]) {
@@ -465,7 +459,7 @@ int main(int argc, char *argv[]) {
 
 
 
-
+/*
 
 // path tracing shading
 static float3 pathShader(Ray ray) {
@@ -576,7 +570,7 @@ static float3 pathShader(Ray ray) {
 
 
 
-/*
+
 		// sample surface of light source
 		float3 lightPoint = light->sampleSurface(lightNormal);
 		float3 hitToLight = lightPoint - hitPoint;
@@ -596,7 +590,7 @@ static float3 pathShader(Ray ray) {
 				radiance += weight * throughput * hitInfo.material->spectrum() * light->material.emission * geometry / probLight;
 			}
 		}
-*/
+
 
 
 
@@ -618,3 +612,141 @@ static float3 pathShader(Ray ray) {
 	// return radiance
 	return radiance;
 }
+
+*/
+
+
+
+
+
+
+
+
+
+
+
+/*
+
+// spherical light source
+class Sphere {
+
+	public:
+
+		float3 centre;
+		float radius;
+		float radiusInv;
+		Material material;
+
+		// constructor
+		Sphere(float3 c, float r, Material m): centre(c), radius(r), radiusInv(1 / r), material(m) {}
+
+		// check if ray intersects sphere
+		bool intersect(HitInfo& hitInfo, const Ray& ray, float tMin, float tMax) const {
+
+			// solve quadratic vector equation
+			float3 oc = centre - ray.o;
+			float b = dot(ray.d, oc);
+			float c = dot(oc, oc) - radius * radius;
+			float discriminant = b * b - c;
+
+			// no intersection
+			if (discriminant < 0) return false;
+
+			// intersection
+			discriminant = sqrtf(discriminant);
+
+			// find minimum t
+			float t = b - discriminant;
+			if (t < tMin || tMax < t) {
+				t = b + discriminant;
+				if (t < tMin || tMax < t) {
+					return false;
+				}
+			}
+
+			// set hit info and return
+			hitInfo.t = t;
+			hitInfo.P = ray.o + hitInfo.t * ray.d;
+			hitInfo.G = normalize(hitInfo.P - centre);
+			hitInfo.material = &material;
+			return true;
+		}
+
+		// generate random point on the sphere
+		float3 sampleSurface(const float3& n) const {
+
+			// using normalized 3d standard normal
+			if (SAMPLE_UNIFORM_HEMISPHERE) {
+				float3 d = float3(std_norm(gen), std_norm(gen), std_norm(gen));
+				while (d.x == 0 && d.y == 0 && d.z == 0) d = float3(std_norm(gen), std_norm(gen), std_norm(gen));
+				d = normalize(d);
+				if (dot(n, d) < 0) d *= -1;
+				return centre + radius * d;
+			}
+
+			// using malley's method
+			else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) {
+
+				// sample cos weighted positive unit hemisphere
+				float x = 2 * PCG32::rand() - 1;
+				float y = 2 * PCG32::rand() - 1;
+				if (x == 0 && y == 0) return float3(x, y, 1);
+				float theta, r;
+				if (abs(x) > abs(y)) {
+					r = x;
+					theta = PI_OVER_FOUR * (y / x);
+				}
+				else {
+					r = y;
+					theta = PI_OVER_TWO - PI_OVER_FOUR * (x / y);
+				}
+				float3 d = float3(r * cos(theta), r * sin(theta), sqrtf(1 - x * x - y * y));
+
+				// build orthonormal basis with normal
+				float sign = copysignf(1, n.z);
+				const float a = -1 / (sign + n.z);
+				const float b = n.x * n.y * a;
+				const float3 b1 = float3(1 + sign * n.x * n.x * a, sign * b, -sign * n.x);
+				const float3 b2 = float3(b, sign + n.y * n.y * a, -n.y);
+
+				// centre about normal
+				return centre + radius * (d.x * b1 + d.y * b2 + d.z * n);
+			}
+
+			// checking if this works ...
+			else if (SAMPLE_UNIFORM_HEMISPHERE_LIKE_A_NOOB) {
+				
+				// using spherical coordinates
+				const float z = PCG32::rand();
+				const float r = sqrtf(1 - z * z);
+				const float phi = 2 * PI * PCG32::rand();
+				const float3 d = float3(r * std::cos(phi), r * std::sin(phi), z);
+
+				// build orthonormal basis with normal
+				float sign = copysignf(1, n.z);
+				const float a = -1 / (sign + n.z);
+				const float b = n.x * n.y * a;
+				const float3 b1 = float3(1 + sign * n.x * n.x * a, sign * b, -sign * n.x);
+				const float3 b2 = float3(b, sign + n.y * n.y * a, -n.y);
+
+				// centre about normal
+				return centre + radius * (d.x * b1 + d.y * b2 + d.z * n);
+			}
+		}
+
+		// sample pdf
+		float pdf(const float3& n, const float3& wi) const {
+
+			// hemisphere subtends 2 Pi steradians
+			if (SAMPLE_UNIFORM_HEMISPHERE) return ONE_OVER_TWO_PI * radiusInv * radiusInv;
+
+			// inputs must be normalized
+			else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return dot(n, wi) * ONE_OVER_PI * radiusInv * radiusInv;
+
+			// checking if this works ...
+			else if (SAMPLE_UNIFORM_HEMISPHERE_LIKE_A_NOOB) return ONE_OVER_TWO_PI * radiusInv * radiusInv;
+		}
+
+};
+
+*/

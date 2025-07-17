@@ -69,9 +69,11 @@ int main(const int argc, const char* argv[]) {
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // set up lighting - camera is at (0, 0, 1.5) looking negative z
     // float3 centre(0.0f, 0.0f, 5.0f); float radius(3.0f); // initial testing
+    // float3 centre(-0.5f, 1.0f, 2.0f); // secondary testing
 
-    float3 centre(-0.25f, 0.25f, -0.25f); // in the box - light a
-    // float3 centre(-0.5f, 1.0f, 2.0f); // behind slightly left - light b
+    float3 centre(-0.25f, 0.25f, -0.25f); // in box top left back corner
+    // float3 centre(-0.25f, 0.25f, 0.25f); // in box top left front corner
+    
 
     float radius(0.025f);
     // float radius(0.05f);

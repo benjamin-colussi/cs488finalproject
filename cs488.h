@@ -18,6 +18,7 @@ using namespace linalg::aliases;
 #include <iostream>
 #include <cfloat>
 #include <vector>
+#include <cmath>
 
 // global constants
 constexpr float PI = 3.14159265358979f;
@@ -65,23 +66,12 @@ namespace PCG32 {
 	}
 }
 
-// random normal generator
-#include <random>
-constexpr float mu = 0.0f;
-constexpr float sigma = 1.0f;
-std::random_device rd; // random seed
-std::mt19937 gen(rd()); // mersenne twister engine
-std::normal_distribution<float> std_norm(mu, sigma);
-
 // global constants and variables
-constexpr int MAX_REFLECTION_RECURSION_DEPTH = 4;
-constexpr int MAX_REFRACTION_RECURSION_DEPTH = 4;
-constexpr int MAXIMUM_PATH_LENGTH = 0;
+constexpr int MINIMUM_PATH_LENGTH = 0;
 
 // switches
-constexpr bool SAMPLE_UNIFORM_HEMISPHERE = false;
-constexpr bool SAMPLE_COS_WEIGHTED_HEMISPHERE = true;
-constexpr bool SAMPLE_UNIFORM_HEMISPHERE_LIKE_A_NOOB = false;
+constexpr bool SAMPLE_UNIFORM_HEMISPHERE = true;
+constexpr bool SAMPLE_COS_WEIGHTED_HEMISPHERE = false;
 
 
 
@@ -212,21 +202,34 @@ class Material {
 		float3 sampleDirection(const float3& wo, const float3& n) const {
 
 			// perfect diffuse
-			if (type == LAMBERTIAN) {
+			if (type == LAMBERTIAN || type == LIGHT) {
 
-				// using normalized 3d standard normal
+				// using spherical coordinates
 				if (SAMPLE_UNIFORM_HEMISPHERE) {
-					float3 d = float3(std_norm(gen), std_norm(gen), std_norm(gen));
-					while (d.x == 0 && d.y == 0 && d.z == 0) d = float3(std_norm(gen), std_norm(gen), std_norm(gen));
-					d = normalize(d);
+
+					// using spherical coordinates
+					const float z = PCG32::rand();
+					const float r = sqrtf(1 - z * z);
+					const float phi = 2 * PI * PCG32::rand();
+					float3 d = float3(r * std::cos(phi), r * std::sin(phi), z);
 					if (dot(n, d) < 0) d *= -1;
 					return d;
+
+					// build orthonormal basis with normal
+					// const float sign = copysignf(1, n.z);
+					// const float a = -1 / (sign + n.z);
+					// const float b = n.x * n.y * a;
+					// const float3 b1 = float3(1 + sign * n.x * n.x * a, sign * b, -sign * n.x);
+					// const float3 b2 = float3(b, sign + n.y * n.y * a, -n.y);
+
+					// centre about normal
+					// return d.x * b1 + d.y * b2 + d.z * n;
 				}
 
 				// using malley's method
 				else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) {
 
-					// sample cos weighted positive unit hemisphere
+					// sample unit disk
 					float x = 2 * PCG32::rand() - 1;
 					float y = 2 * PCG32::rand() - 1;
 					if (x == 0 && y == 0) return float3(x, y, 1);
@@ -239,30 +242,15 @@ class Material {
 						r = y;
 						theta = PI_OVER_TWO - PI_OVER_FOUR * (x / y);
 					}
-					float3 d = float3(r * cos(theta), r * sin(theta), sqrtf(1 - x * x - y * y));
+					x = r * cos(theta);
+					y = r * sin(theta);
+
+					// project to hemisphere
+					float z = sqrtf(1 - x * x - y * y);
+					float3 d = float3(x, y, z);
 
 					// build orthonormal basis with normal
-					float sign = copysignf(1, n.z);
-					const float a = -1 / (sign + n.z);
-					const float b = n.x * n.y * a;
-					const float3 b1 = float3(1 + sign * n.x * n.x * a, sign * b, -sign * n.x);
-					const float3 b2 = float3(b, sign + n.y * n.y * a, -n.y);
-
-					// centre about normal
-					return d.x * b1 + d.y * b2 + d.z * n;
-				}
-
-				// checking if this works ...
-				else if (SAMPLE_UNIFORM_HEMISPHERE_LIKE_A_NOOB) {
-					
-					// using spherical coordinates
-					const float z = PCG32::rand();
-					const float r = sqrtf(1 - z * z);
-					const float phi = 2 * PI * PCG32::rand();
-					const float3 d = float3(r * std::cos(phi), r * std::sin(phi), z);
-
-					// build orthonormal basis with normal
-					float sign = copysignf(1, n.z);
+					const float sign = copysignf(1, n.z);
 					const float a = -1 / (sign + n.z);
 					const float b = n.x * n.y * a;
 					const float3 b1 = float3(1 + sign * n.x * n.x * a, sign * b, -sign * n.x);
@@ -275,8 +263,7 @@ class Material {
 
 			// perfect specular reflection
 			if (type == METAL) {
-				float3 reflection = wo - 2 * dot(wo, n) * n;
-				// if (dot(reflection, n) < 0) reflection -= 2 * dot(reflection, n) * n; // unecessary? ...
+				const float3 reflection = -wo - 2 * n * dot(n, -wo);
 				return normalize(reflection);
 			}
 
@@ -288,16 +275,9 @@ class Material {
 		float pdf(const float3& n, const float3& wi) const {
 
 			// perfect diffuse
-			if (type == LAMBERTIAN) {
-
-				// hemisphere subtends 2 Pi steradians
+			if (type == LAMBERTIAN || type == LIGHT) {
 				if (SAMPLE_UNIFORM_HEMISPHERE) return ONE_OVER_TWO_PI;
-
-				// inputs must be normalized
 				else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return dot(n, wi) * ONE_OVER_PI;
-
-				// checking if this works ...
-				else if (SAMPLE_UNIFORM_HEMISPHERE_LIKE_A_NOOB) return ONE_OVER_TWO_PI;
 			}
 
 			// perfect specular reflection
@@ -490,15 +470,22 @@ class TriangleMesh {
 			result.T = alpha * tri.texcoords[0] + beta * tri.texcoords[1] + gamma * tri.texcoords[2];
 			result.material = &materials[tri.idMaterial];
 
-			// calculate geometric normal to front of triangle
-			float3 g = normalize(cross(ba, ca));
-			// assuming the interpolated shading normal is pointing towards the front of the triangle
-			if (dot(g, result.N) < 0) g *= -1;
-			result.G = g;
+			// for ray tracing
 
-			// check if hitting front of triangle
-			if (dot(-ray.d, result.G) > 0) result.front = true;
-			else result.front = false;
+			// // calculate geometric normal to front of triangle
+			// float3 g = normalize(cross(ba, ca));
+			// // assuming the interpolated shading normal is pointing towards the front of the triangle
+			// if (dot(g, result.N) < 0) g *= -1;
+			// result.G = g;
+
+			// // check if hitting front of triangle
+			// if (dot(-ray.d, result.G) > 0) result.front = true;
+			// else result.front = false;
+
+			// for path tracing
+			float3 g = normalize(cross(ba, ca));
+			if (dot(g, -ray.d) < 0) g *= -1;
+			result.G = g;
 
 			// return true/false if there is an intersection or not
 			return true;
@@ -1447,81 +1434,6 @@ class Sphere {
 			return true;
 		}
 
-		// generate random point on the sphere
-		float3 sampleSurface(const float3& n) const {
-
-			// using normalized 3d standard normal
-			if (SAMPLE_UNIFORM_HEMISPHERE) {
-				float3 d = float3(std_norm(gen), std_norm(gen), std_norm(gen));
-				while (d.x == 0 && d.y == 0 && d.z == 0) d = float3(std_norm(gen), std_norm(gen), std_norm(gen));
-				d = normalize(d);
-				if (dot(n, d) < 0) d *= -1;
-				return centre + radius * d;
-			}
-
-			// using malley's method
-			else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) {
-
-				// sample cos weighted positive unit hemisphere
-				float x = 2 * PCG32::rand() - 1;
-				float y = 2 * PCG32::rand() - 1;
-				if (x == 0 && y == 0) return float3(x, y, 1);
-				float theta, r;
-				if (abs(x) > abs(y)) {
-					r = x;
-					theta = PI_OVER_FOUR * (y / x);
-				}
-				else {
-					r = y;
-					theta = PI_OVER_TWO - PI_OVER_FOUR * (x / y);
-				}
-				float3 d = float3(r * cos(theta), r * sin(theta), sqrtf(1 - x * x - y * y));
-
-				// build orthonormal basis with normal
-				float sign = copysignf(1, n.z);
-				const float a = -1 / (sign + n.z);
-				const float b = n.x * n.y * a;
-				const float3 b1 = float3(1 + sign * n.x * n.x * a, sign * b, -sign * n.x);
-				const float3 b2 = float3(b, sign + n.y * n.y * a, -n.y);
-
-				// centre about normal
-				return centre + radius * (d.x * b1 + d.y * b2 + d.z * n);
-			}
-
-			// checking if this works ...
-			else if (SAMPLE_UNIFORM_HEMISPHERE_LIKE_A_NOOB) {
-				
-				// using spherical coordinates
-				const float z = PCG32::rand();
-				const float r = sqrtf(1 - z * z);
-				const float phi = 2 * PI * PCG32::rand();
-				const float3 d = float3(r * std::cos(phi), r * std::sin(phi), z);
-
-				// build orthonormal basis with normal
-				float sign = copysignf(1, n.z);
-				const float a = -1 / (sign + n.z);
-				const float b = n.x * n.y * a;
-				const float3 b1 = float3(1 + sign * n.x * n.x * a, sign * b, -sign * n.x);
-				const float3 b2 = float3(b, sign + n.y * n.y * a, -n.y);
-
-				// centre about normal
-				return centre + radius * (d.x * b1 + d.y * b2 + d.z * n);
-			}
-		}
-
-		// sample pdf
-		float pdf(const float3& n, const float3& wi) const {
-
-			// hemisphere subtends 2 Pi steradians
-			if (SAMPLE_UNIFORM_HEMISPHERE) return ONE_OVER_TWO_PI * radiusInv * radiusInv;
-
-			// inputs must be normalized
-			else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return dot(n, wi) * ONE_OVER_PI * radiusInv * radiusInv;
-
-			// checking if this works ...
-			else if (SAMPLE_UNIFORM_HEMISPHERE_LIKE_A_NOOB) return ONE_OVER_TWO_PI * radiusInv * radiusInv;
-		}
-
 };
 
 // forward declaration
@@ -1675,7 +1587,163 @@ static float3 pathShader(Ray ray) {
 
 	// multiple importance sampling
 	float probBRDF = 0.0f;
-	float cosThetaMax;
+	float cosThetaMax = 0.0f;
+
+	// hit specular material
+	bool specular = false;
+
+	// trace path
+	int pathLength = 0;
+	while (true) {
+
+		// check intersection
+		HitInfo hitInfo;
+		if (globalScene.intersect(hitInfo, ray) == false) break;
+		const float3 hitPoint = hitInfo.P + hitInfo.G * EPSILON;
+		const float3 wo = -ray.d;
+		++pathLength;
+
+		// hit emissive material
+		if (hitInfo.material->type == LIGHT) {
+
+			// camera ray intersection or hit specular material
+			if (pathLength == 1 || specular) {
+				radiance += throughput * hitInfo.material->emission;
+			}
+
+			// multiple importance sampling
+			else {
+				throughput *= probBRDF / (probBRDF + (1 / (2 * PI * (1 - cosThetaMax))));
+				radiance += throughput * hitInfo.material->emission;
+			}
+		}
+
+		// hit specular material
+		else if (hitInfo.material->type == METAL) {
+			throughput *= hitInfo.material->Ks;
+			ray = Ray(hitPoint, hitInfo.material->sampleDirection(wo, hitInfo.G));
+			specular = true;
+			continue;
+		}
+
+		// next event estimation
+		const int k = 0;
+		const Sphere* light = globalScene.lights[k];
+		float3 lightNormal = light->centre - hitPoint;
+		const float oneOverDistanceSquared = 1 / dot(lightNormal, lightNormal);
+		lightNormal *= sqrtf(oneOverDistanceSquared);
+
+		// random friends
+		const float Bertrand = PCG32::rand();
+		const float Randolf = PCG32::rand();
+
+		// calculate random direction towards visible spherical cap
+		cosThetaMax = sqrtf(std::max(0.0f, 1 - light->radius * light->radius * oneOverDistanceSquared));
+		const float cosTheta = 1 + (cosThetaMax - 1) * Bertrand;
+		const float sinTheta = sqrtf(1 - cosTheta * cosTheta);
+		const float phi = 2 * PI * Randolf;
+
+		// build orthonormal basis and centre about light normal
+		const float sign = copysignf(1, lightNormal.z);
+		const float a = -1 / (sign + lightNormal.z);
+		const float b = lightNormal.x * lightNormal.y * a;
+		const float3 b1 = float3(1 + sign * lightNormal.x * lightNormal.x * a, sign * b, -sign * lightNormal.x);
+		const float3 b2 = float3(b, sign + lightNormal.y * lightNormal.y * a, -lightNormal.y);
+		const float3 wi = cosTheta * lightNormal + sinTheta * std::cos(phi) * b1 + sinTheta * std::sin(phi) * b2;
+
+		// trace shadow ray from hit to light
+		HitInfo shadowHitInfo;
+		if (globalScene.intersect(shadowHitInfo, Ray(hitPoint, wi)) && shadowHitInfo.material->type == LIGHT) {
+			const float probLight = 1 / (2 * PI * (1 - cosThetaMax));
+			const float weight = 1 / (probLight + hitInfo.material->pdf(hitInfo.G, wi));
+			radiance += weight * throughput * hitInfo.material->spectrum() * light->material.emission * dot(hitInfo.G, wi);
+		}
+
+		// continue path and update throughput
+		ray = Ray(hitPoint, hitInfo.material->sampleDirection(wo, hitInfo.G));
+		probBRDF = hitInfo.material->pdf(hitInfo.G, ray.d);
+		throughput *= hitInfo.material->spectrum() * dot(hitInfo.G, ray.d) / probBRDF;
+		specular = false;
+
+		// russian roulette
+		if (pathLength > MINIMUM_PATH_LENGTH) {
+
+			// original
+			// float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
+			// if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
+			// else break;
+
+			// creates a black cross around the light ...
+			// float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
+			// if (probabilityOfContinuing < 1) {
+			// 	probabilityOfContinuing = std::max(0.25f, probabilityOfContinuing);
+			// 	if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
+			// 	else break;
+			// }
+
+			// third time's the charm ...
+			float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
+			probabilityOfContinuing = std::max(0.01f, probabilityOfContinuing);
+			if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
+			else break;
+
+			// try clamping at EPSILON ...
+			// float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
+			// probabilityOfContinuing = std::max(EPSILON, probabilityOfContinuing);
+			// if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
+			// else break;
+
+			// try adding check for prob < 1 ...
+			// float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
+			// if (probabilityOfContinuing < 1) {
+			// 	if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
+			// 	else break;
+			// }
+		}
+
+
+
+		// does not go to naan :^D
+		// if (std::isnan(hitInfo.G.x) || std::isnan(hitInfo.G.y) || std::isnan(hitInfo.G.z)) std::cout << "hitInfo.G" << std::endl;
+		// if (std::isnan(wo.x) || std::isnan(wo.y) || std::isnan(wo.z)) std::cout << "wo" << std::endl;
+		// if (std::isnan(oneOverDistanceSquared)) std::cout << "oneOverDistanceSquared" << std::endl;
+		// if (std::isnan(cosThetaMax)) std::cout << "cosThetaMax" << std::endl;
+		// if (std::isnan(cosTheta)) std::cout << "cosTheta" << std::endl;
+		// if (std::isnan(sinTheta)) std::cout << "sinTheta" << std::endl;
+		// if (std::isnan(phi)) std::cout << "phi" << std::endl;
+
+		// goes to naan :^(
+		if (std::isnan(probBRDF)) std::cout << "probBRDF" << std::endl;
+		if (std::isnan(throughput.x) || std::isnan(throughput.y) || std::isnan(throughput.z)) std::cout << "throughput" << std::endl;
+
+
+
+	}
+
+
+
+	// return radiance
+	return radiance;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/*
+
+// path tracing shading
+static float3 pathShader(Ray ray) {
+
+	// radiance, throughput
+	float3 radiance(0.0f), throughput(1.0f);
+
+	// multiple importance sampling
+	float probBRDF = 0.0f;
 
 	// hit specular material
 	bool specular = false;
@@ -1694,7 +1762,7 @@ static float3 pathShader(Ray ray) {
 		// next event estimation
 		const int k = 0;
 		const Sphere* light = globalScene.lights[k];
-		// const float3 lightNormal = normalize(hitPoint - light->centre);
+		const float3 lightNormal = normalize(hitPoint - light->centre);
 
 		// hit emissive surface
 		if (hitInfo.material->type == LIGHT) {
@@ -1704,79 +1772,11 @@ static float3 pathShader(Ray ray) {
 
 			// multiple importance sampling
 			else {
-				// throughput *= probBRDF / (probBRDF + light->pdf(lightNormal, hitInfo.G));
-				throughput *= probBRDF / (probBRDF + (1 / (2 * PI * (1 - cosThetaMax))));
+				throughput *= probBRDF / (probBRDF + light->pdf(lightNormal, hitInfo.G));
 				radiance += throughput * hitInfo.material->emission;
 			}
 		}
 
-
-
-
-
-		// distance from centre of spherical light
-		// float3 lightNormal = hitPoint - light->centre;
-		float3 lightNormal = light->centre - hitPoint;
-		float oneOverDistanceSquared = 1 / dot(lightNormal, lightNormal);
-		lightNormal *= sqrtf(oneOverDistanceSquared);
-
-		// random friends
-		const float Bertrand = PCG32::rand();
-		const float Randolf = PCG32::rand();
-
-		// random direction in cone of spherical light
-		// const float sinThetaMax2 = light->radius * light->radius * oneOverDistanceSquared;
-		// const float sinThetaMax = sqrtf(sinThetaMax2);
-		cosThetaMax = sqrtf(std::max(0.0f, 1 - light->radius * light->radius * oneOverDistanceSquared));
-		const float cosTheta = 1 + (cosThetaMax - 1) * Bertrand;
-		// const float sinTheta2 = 1 - cosTheta * cosTheta;
-		const float sinTheta = sqrtf(1 - cosTheta * cosTheta);
-		// const float cosAlpha = sinTheta2 / sinThetaMax + cosTheta * sqrtf(1 - sinTheta2 / sinThetaMax2);
-		// const float sinAlpha = sqrtf(1 - cosAlpha * cosAlpha);
-		const float phi = 2 * PI * Randolf;
-
-		// const float cosThetaMax = sqrtf(1 - light->radius * light->radius * oneOverDistanceSquared);
-		// const float cosTheta = 1 - Bertrand + Randolf * cosThetaMax;
-		// const float sinTheta = sqrtf(1 - cosTheta * cosTheta);
-		// const float phi = 2 * PI * Randolf;
-
-		// float cos_theta = std::lerp(r1, cos_theta_max, 1.f);
-		// float sin_theta = std::sqrt(1.f - cos_theta * cos_theta);
-		// float phi = 2 * M_PI * r2;
-		// return std::cos(phi) * sin_theta * x + std::sin(phi) * sin_theta * y + cos_theta * z;
-
-		// build orthonormal basis
-		float sign = copysignf(1, lightNormal.z);
-		const float a = -1 / (sign + lightNormal.z);
-		const float b = lightNormal.x * lightNormal.y * a;
-		const float3 b1 = float3(1 + sign * lightNormal.x * lightNormal.x * a, sign * b, -sign * lightNormal.x);
-		const float3 b2 = float3(b, sign + lightNormal.y * lightNormal.y * a, -lightNormal.y);
-
-		// centre about normal
-		// const float3 lightPointNormal = cosAlpha * lightNormal + sinAlpha * std::cos(phi) * b1 + sinAlpha * std::sin(phi) * b2;
-		// const float3 lightPoint = light->centre + light->radius * lightPointNormal;
-		// float3 wi = lightPoint - hitPoint;
-		// oneOverDistanceSquared = 1 / dot(wi, wi);
-		// wi *= sqrtf(oneOverDistanceSquared);
-
-		const float3 wi = cosTheta * lightNormal + sinTheta * std::cos(phi) * b1 + sinTheta * std::sin(phi) * b2;
-
-		// trace shadow ray from hit to light
-		HitInfo shadowHitInfo;
-		if (globalScene.intersect(shadowHitInfo, Ray(hitPoint, wi)) && shadowHitInfo.material->type == LIGHT) {
-			
-			const float probLight = 1 / (2 * PI * (1 - cosThetaMax));
-			const float weight = probLight / (probLight + hitInfo.material->pdf(hitInfo.G, wi));
-
-			// const float geometry = dot(hitInfo.G, wi) * dot(lightPointNormal, -wi) * oneOverDistanceSquared;
-			// radiance += weight * throughput * hitInfo.material->spectrum() * light->material.emission * geometry / probLight;
-
-			radiance += weight * throughput * hitInfo.material->spectrum() * light->material.emission * dot(hitInfo.G, wi) / probLight; // looks much better without geometry term
-		}
-
-
-
-/*
 		// sample surface of light source
 		float3 lightPoint = light->sampleSurface(lightNormal);
 		float3 hitToLight = lightPoint - hitPoint;
@@ -1796,9 +1796,6 @@ static float3 pathShader(Ray ray) {
 				radiance += weight * throughput * hitInfo.material->spectrum() * light->material.emission * geometry / probLight;
 			}
 		}
-*/
-
-
 
 		// continue path
 		ray = Ray(hitPoint, hitInfo.material->sampleDirection(wo, hitInfo.G));
@@ -1808,7 +1805,7 @@ static float3 pathShader(Ray ray) {
 		throughput *= hitInfo.material->spectrum() * dot(hitInfo.G, ray.d) / probBRDF;
 
 		// russian roulette
-		if (pathLength > MAXIMUM_PATH_LENGTH) {
+		if (pathLength > MINIMUM_PATH_LENGTH) {
 			float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
 			if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
 			else break;
@@ -1819,10 +1816,4 @@ static float3 pathShader(Ray ray) {
 	return radiance;
 }
 
-
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+*/
