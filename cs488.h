@@ -4,8 +4,6 @@
 //////////   (extended by Benjamin Colussi)   /////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
-
 // hello world
 #pragma once
 #define NOMINMAX
@@ -70,18 +68,14 @@ namespace PCG32 {
 constexpr int MINIMUM_PATH_LENGTH = 0;
 
 // switches
-constexpr bool SAMPLE_UNIFORM_HEMISPHERE = true;
-constexpr bool SAMPLE_COS_WEIGHTED_HEMISPHERE = false;
-
-
+constexpr bool SAMPLE_UNIFORM_HEMISPHERE = false;
+constexpr bool SAMPLE_COS_WEIGHTED_HEMISPHERE = true;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
 
 // image
 class Image {
@@ -118,8 +112,6 @@ class Image {
 
 // final image to be computed
 Image globalImage(globalWidth, globalHeight);
-
-
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -195,7 +187,8 @@ class Material {
 			if (type == METAL) {}
 
 			// default
-			return float3(0.0f);
+			return float3(0.0f); // a
+			// return float3(1.0f); // b - does this make sense ???
 		}
 
 		// sample direction
@@ -1674,18 +1667,18 @@ static float3 pathShader(Ray ray) {
 			// else break;
 
 			// creates a black cross around the light ...
-			// float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
-			// if (probabilityOfContinuing < 1) {
-			// 	probabilityOfContinuing = std::max(0.25f, probabilityOfContinuing);
-			// 	if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
-			// 	else break;
-			// }
+			float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
+			if (probabilityOfContinuing < 1) {
+				probabilityOfContinuing = std::max(0.25f, probabilityOfContinuing);
+				if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
+				else break;
+			}
 
 			// third time's the charm ...
-			float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
-			probabilityOfContinuing = std::max(0.01f, probabilityOfContinuing);
-			if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
-			else break;
+			// float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
+			// probabilityOfContinuing = std::max(0.01f, probabilityOfContinuing);
+			// if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
+			// else break;
 
 			// try clamping at EPSILON ...
 			// float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
@@ -1704,13 +1697,13 @@ static float3 pathShader(Ray ray) {
 
 
 		// does not go to naan :^D
-		// if (std::isnan(hitInfo.G.x) || std::isnan(hitInfo.G.y) || std::isnan(hitInfo.G.z)) std::cout << "hitInfo.G" << std::endl;
-		// if (std::isnan(wo.x) || std::isnan(wo.y) || std::isnan(wo.z)) std::cout << "wo" << std::endl;
-		// if (std::isnan(oneOverDistanceSquared)) std::cout << "oneOverDistanceSquared" << std::endl;
-		// if (std::isnan(cosThetaMax)) std::cout << "cosThetaMax" << std::endl;
-		// if (std::isnan(cosTheta)) std::cout << "cosTheta" << std::endl;
-		// if (std::isnan(sinTheta)) std::cout << "sinTheta" << std::endl;
-		// if (std::isnan(phi)) std::cout << "phi" << std::endl;
+		if (std::isnan(hitInfo.G.x) || std::isnan(hitInfo.G.y) || std::isnan(hitInfo.G.z)) std::cout << "hitInfo.G" << std::endl;
+		if (std::isnan(wo.x) || std::isnan(wo.y) || std::isnan(wo.z)) std::cout << "wo" << std::endl;
+		if (std::isnan(oneOverDistanceSquared)) std::cout << "oneOverDistanceSquared" << std::endl;
+		if (std::isnan(cosThetaMax)) std::cout << "cosThetaMax" << std::endl;
+		if (std::isnan(cosTheta)) std::cout << "cosTheta" << std::endl;
+		if (std::isnan(sinTheta)) std::cout << "sinTheta" << std::endl;
+		if (std::isnan(phi)) std::cout << "phi" << std::endl;
 
 		// goes to naan :^(
 		if (std::isnan(probBRDF)) std::cout << "probBRDF" << std::endl;
