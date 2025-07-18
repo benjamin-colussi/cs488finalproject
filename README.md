@@ -57,14 +57,5 @@ try TEV for viewing output
 
 
 ## Questions:
-* is it possible to sample the same path twice? should we account for this?
-* i think my MIS doesnt make sense - weights sum to 1 if the same path is sampled
-* weights dont sum to 1 if 
-
-
-* what is the reason for passing by reference? is it to not overflow?
-* multiplying by 1 / something
-
-
-* if i am sampling a point on the surface of the sphere, am i using surface area formulation or solid angle? can i use the same method to draw solid angle as drawing points on sphere?
-should i be using conic sampling to get a direction towards sphere area lights?
+* what else can we add to unidirectional pt - RR, NEE, MIS, ... ?
+* path guiding

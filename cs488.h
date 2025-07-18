@@ -77,6 +77,8 @@ constexpr bool SAMPLE_COS_WEIGHTED_HEMISPHERE = true;
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+
+
 // image
 class Image {
 
@@ -112,6 +114,8 @@ class Image {
 
 // final image to be computed
 Image globalImage(globalWidth, globalHeight);
+
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -187,8 +191,8 @@ class Material {
 			if (type == METAL) {}
 
 			// default
-			return float3(0.0f); // a
-			// return float3(1.0f); // b - does this make sense ???
+			return float3(0.0f); // a - if it aint broke ...
+			// return float3(1.0f); // b - does this make sense ??? - makes black specs around light
 		}
 
 		// sample direction
@@ -205,6 +209,8 @@ class Material {
 					const float r = sqrtf(1 - z * z);
 					const float phi = 2 * PI * PCG32::rand();
 					float3 d = float3(r * std::cos(phi), r * std::sin(phi), z);
+
+					// flip on normal
 					if (dot(n, d) < 0) d *= -1;
 					return d;
 
@@ -227,7 +233,7 @@ class Material {
 					float y = 2 * PCG32::rand() - 1;
 					if (x == 0 && y == 0) return float3(x, y, 1);
 					float theta, r;
-					if (abs(x) > abs(y)) {
+					if (std::abs(x) > std::abs(y)) {
 						r = x;
 						theta = PI_OVER_FOUR * (y / x);
 					}
@@ -235,12 +241,13 @@ class Material {
 						r = y;
 						theta = PI_OVER_TWO - PI_OVER_FOUR * (x / y);
 					}
-					x = r * cos(theta);
-					y = r * sin(theta);
+					x = r * std::cos(theta);
+					y = r * std::sin(theta);
 
-					// project to hemisphere
-					float z = sqrtf(1 - x * x - y * y);
-					float3 d = float3(x, y, z);
+					// project to hemisphere safely
+					float z = 1 - x * x - y * y;
+					if (z < EPSILON) z = 0;
+					else z = sqrtf(z);
 
 					// build orthonormal basis with normal
 					const float sign = copysignf(1, n.z);
@@ -250,7 +257,7 @@ class Material {
 					const float3 b2 = float3(b, sign + n.y * n.y * a, -n.y);
 
 					// centre about normal
-					return d.x * b1 + d.y * b2 + d.z * n;
+					return x * b1 + y * b2 + z * n;
 				}
 			}
 
@@ -1552,7 +1559,12 @@ class Scene {
 					}
 
 					// average over strata samples
-					globalImage.pixel(i, j) = shade * invStrata;
+					const float3 pixelValue = shade * invStrata;
+					if (std::isnan(pixelValue.x) || std::isnan(pixelValue.y) || std::isnan(pixelValue.z)) {
+						globalImage.pixel(i, j) = float3(1.0f, 0.0f, 1.0f); // return pink
+						std::cout << "we got NaaN @ pixel (" << i << ", " << j << ") !! :^(" << std::endl;
+					}
+					else globalImage.pixel(i, j) = pixelValue;
 				}
 			}
 		}
@@ -1580,7 +1592,7 @@ static float3 pathShader(Ray ray) {
 
 	// multiple importance sampling
 	float probBRDF = 0.0f;
-	float cosThetaMax = 0.0f;
+	float probLight = 0.0f;
 
 	// hit specular material
 	bool specular = false;
@@ -1600,15 +1612,10 @@ static float3 pathShader(Ray ray) {
 		if (hitInfo.material->type == LIGHT) {
 
 			// camera ray intersection or hit specular material
-			if (pathLength == 1 || specular) {
-				radiance += throughput * hitInfo.material->emission;
-			}
+			if (pathLength == 1 || specular) radiance += throughput * hitInfo.material->emission;
 
 			// multiple importance sampling
-			else {
-				throughput *= probBRDF / (probBRDF + (1 / (2 * PI * (1 - cosThetaMax))));
-				radiance += throughput * hitInfo.material->emission;
-			}
+			else radiance += (probBRDF / (probBRDF + probLight)) * throughput * hitInfo.material->emission;
 		}
 
 		// hit specular material
@@ -1631,7 +1638,7 @@ static float3 pathShader(Ray ray) {
 		const float Randolf = PCG32::rand();
 
 		// calculate random direction towards visible spherical cap
-		cosThetaMax = sqrtf(std::max(0.0f, 1 - light->radius * light->radius * oneOverDistanceSquared));
+		const float cosThetaMax = sqrtf(std::max(0.0f, 1 - light->radius * light->radius * oneOverDistanceSquared));
 		const float cosTheta = 1 + (cosThetaMax - 1) * Bertrand;
 		const float sinTheta = sqrtf(1 - cosTheta * cosTheta);
 		const float phi = 2 * PI * Randolf;
@@ -1644,10 +1651,10 @@ static float3 pathShader(Ray ray) {
 		const float3 b2 = float3(b, sign + lightNormal.y * lightNormal.y * a, -lightNormal.y);
 		const float3 wi = cosTheta * lightNormal + sinTheta * std::cos(phi) * b1 + sinTheta * std::sin(phi) * b2;
 
-		// trace shadow ray from hit to light
+		// check visibility
 		HitInfo shadowHitInfo;
 		if (globalScene.intersect(shadowHitInfo, Ray(hitPoint, wi)) && shadowHitInfo.material->type == LIGHT) {
-			const float probLight = 1 / (2 * PI * (1 - cosThetaMax));
+			probLight = 1 / (2 * PI * (1 - cosThetaMax));
 			const float weight = 1 / (probLight + hitInfo.material->pdf(hitInfo.G, wi));
 			radiance += weight * throughput * hitInfo.material->spectrum() * light->material.emission * dot(hitInfo.G, wi);
 		}
@@ -1655,65 +1662,19 @@ static float3 pathShader(Ray ray) {
 		// continue path and update throughput
 		ray = Ray(hitPoint, hitInfo.material->sampleDirection(wo, hitInfo.G));
 		probBRDF = hitInfo.material->pdf(hitInfo.G, ray.d);
-		throughput *= hitInfo.material->spectrum() * dot(hitInfo.G, ray.d) / probBRDF;
+		throughput *= hitInfo.material->Kd;
 		specular = false;
 
 		// russian roulette
 		if (pathLength > MINIMUM_PATH_LENGTH) {
-
-			// original
-			// float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
-			// if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
-			// else break;
-
-			// creates a black cross around the light ...
 			float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
 			if (probabilityOfContinuing < 1) {
 				probabilityOfContinuing = std::max(0.25f, probabilityOfContinuing);
 				if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
 				else break;
 			}
-
-			// third time's the charm ...
-			// float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
-			// probabilityOfContinuing = std::max(0.01f, probabilityOfContinuing);
-			// if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
-			// else break;
-
-			// try clamping at EPSILON ...
-			// float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
-			// probabilityOfContinuing = std::max(EPSILON, probabilityOfContinuing);
-			// if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
-			// else break;
-
-			// try adding check for prob < 1 ...
-			// float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
-			// if (probabilityOfContinuing < 1) {
-			// 	if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
-			// 	else break;
-			// }
 		}
-
-
-
-		// does not go to naan :^D
-		if (std::isnan(hitInfo.G.x) || std::isnan(hitInfo.G.y) || std::isnan(hitInfo.G.z)) std::cout << "hitInfo.G" << std::endl;
-		if (std::isnan(wo.x) || std::isnan(wo.y) || std::isnan(wo.z)) std::cout << "wo" << std::endl;
-		if (std::isnan(oneOverDistanceSquared)) std::cout << "oneOverDistanceSquared" << std::endl;
-		if (std::isnan(cosThetaMax)) std::cout << "cosThetaMax" << std::endl;
-		if (std::isnan(cosTheta)) std::cout << "cosTheta" << std::endl;
-		if (std::isnan(sinTheta)) std::cout << "sinTheta" << std::endl;
-		if (std::isnan(phi)) std::cout << "phi" << std::endl;
-
-		// goes to naan :^(
-		if (std::isnan(probBRDF)) std::cout << "probBRDF" << std::endl;
-		if (std::isnan(throughput.x) || std::isnan(throughput.y) || std::isnan(throughput.z)) std::cout << "throughput" << std::endl;
-
-
-
 	}
-
-
 
 	// return radiance
 	return radiance;
