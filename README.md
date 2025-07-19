@@ -1,15 +1,18 @@
 # READ ME BRO
 
 ## Completed objectives:
-1. Refactor
-2. Path tracing
-3. Spherical area lights
+1. Refactor? I hardly know her ...
+2. Path tracing w/ RR, NEE & MIS :^D
+3. Spherical area lights :^O
 
 ## Remaining objectives:
 4. BxDF models
-5. Volumetric scattering
-6. Atmospheric scattering
-7. Build scene
+    (i) specular reflection - done
+    (ii) specular refraction w/ Fresnel - do later
+    (iii) microfacet model for rough metal - do later
+5. Volumetric scattering - do next
+6. Atmospheric scattering - do next
+7. Build scene - do later
 
 
 
@@ -23,18 +26,10 @@
 * installed gcc and using compiler optimizations - we r rly flyin now !!!
 * i uninstalled anaconda so ill probs have to fix this later ... womp
 
-## I believe the following are working:
-* spherical area lights
-* uniform and cosine-weighted disk malley duff hemisphere sampling - along with PDFs
-* MIS - might have an issue - not sure if weights are summing to 1 - doesnt rly seem to reduce variance - is this because of only diffuse surfaces?
-
 ## Next:
-* just check if MIS works better with conic sampling - it seems to work the same? so i guess ive implemented it properly?
-* also is my RR cutting at the correct point?
-* perfect reflection
-* perfect refraction
-* filter camera rays using tent or something
-* make RR more robust for possible infinite reflections/refractions
+* atmospheric scattering
+* specular refraction & fresnel
+* filter camera rays
 * BRDF models
 
 
@@ -57,5 +52,4 @@ try TEV for viewing output
 
 
 ## Questions:
-* what else can we add to unidirectional pt - RR, NEE, MIS, ... ?
-* path guiding
+* what else can we add to unidirectional pt - RR, NEE, MIS, ... ?   >>>   path guiding

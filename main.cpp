@@ -26,7 +26,8 @@ $ type g++-15
 // which -a ld
 
 // default no command line argument is 2x2=4
-// 4x4=16, 8x8=64, 16x16=256, 32x32=1024, 64x64=4096, 128x128=16384
+// 4x4=16, 8x8=64, 16x16=256, 32x32=1024, 64x64=4096
+// 128x128=16384, 256x256=65536, 512x512=262144, 1024x1024=1048576
 
 
 
@@ -74,7 +75,6 @@ int main(const int argc, const char* argv[]) {
     float3 centre(-0.25f, 0.25f, -0.25f); // in box top left back corner
     // float3 centre(-0.25f, 0.25f, 0.25f); // in box top left front corner
     
-
     float radius(0.025f);
     // float radius(0.05f);
     // float radius(0.5f);

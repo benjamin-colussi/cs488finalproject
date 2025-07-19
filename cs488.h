@@ -187,16 +187,12 @@ class Material {
 			// perfect diffuse
 			if (type == LAMBERTIAN) return Kd * ONE_OVER_PI;
 
-			// perfect specular reflection
-			if (type == METAL) {}
-
 			// default
-			return float3(0.0f); // a - if it aint broke ...
-			// return float3(1.0f); // b - does this make sense ??? - makes black specs around light
+			return float3(0.0f);
 		}
 
 		// sample direction
-		float3 sampleDirection(const float3& wo, const float3& n) const {
+		float3 sample(const float3& wo, const float3& n) const {
 
 			// perfect diffuse
 			if (type == LAMBERTIAN || type == LIGHT) {
@@ -279,9 +275,6 @@ class Material {
 				if (SAMPLE_UNIFORM_HEMISPHERE) return ONE_OVER_TWO_PI;
 				else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return dot(n, wi) * ONE_OVER_PI;
 			}
-
-			// perfect specular reflection
-			if (type == METAL) {}
 
 			// default
 			return 0.0f;
@@ -1621,7 +1614,7 @@ static float3 pathShader(Ray ray) {
 		// hit specular material
 		else if (hitInfo.material->type == METAL) {
 			throughput *= hitInfo.material->Ks;
-			ray = Ray(hitPoint, hitInfo.material->sampleDirection(wo, hitInfo.G));
+			ray = Ray(hitPoint, hitInfo.material->sample(wo, hitInfo.G));
 			specular = true;
 			continue;
 		}
@@ -1639,6 +1632,7 @@ static float3 pathShader(Ray ray) {
 
 		// calculate random direction towards visible spherical cap
 		const float cosThetaMax = sqrtf(std::max(0.0f, 1 - light->radius * light->radius * oneOverDistanceSquared));
+		probLight = 1 / (2 * PI * (1 - cosThetaMax));
 		const float cosTheta = 1 + (cosThetaMax - 1) * Bertrand;
 		const float sinTheta = sqrtf(1 - cosTheta * cosTheta);
 		const float phi = 2 * PI * Randolf;
@@ -1654,13 +1648,12 @@ static float3 pathShader(Ray ray) {
 		// check visibility
 		HitInfo shadowHitInfo;
 		if (globalScene.intersect(shadowHitInfo, Ray(hitPoint, wi)) && shadowHitInfo.material->type == LIGHT) {
-			probLight = 1 / (2 * PI * (1 - cosThetaMax));
 			const float weight = 1 / (probLight + hitInfo.material->pdf(hitInfo.G, wi));
 			radiance += weight * throughput * hitInfo.material->spectrum() * light->material.emission * dot(hitInfo.G, wi);
 		}
 
 		// continue path and update throughput
-		ray = Ray(hitPoint, hitInfo.material->sampleDirection(wo, hitInfo.G));
+		ray = Ray(hitPoint, hitInfo.material->sample(wo, hitInfo.G));
 		probBRDF = hitInfo.material->pdf(hitInfo.G, ray.d);
 		throughput *= hitInfo.material->Kd;
 		specular = false;
