@@ -16,7 +16,9 @@ using namespace linalg::aliases;
 #include <iostream>
 #include <cfloat>
 #include <vector>
-#include <cmath>
+#include <cmath> // for isnan() debugging
+#include <cassert> // for assert() debugging
+#include <climits> // for SAH-BVH
 
 // global constants
 constexpr float PI = 3.14159265358979f;
@@ -1389,37 +1391,40 @@ class Sphere {
 
 		float3 centre;
 		float radius;
-		float radiusInv;
 		Material material;
 
 		// constructor
-		Sphere(float3 c, float r, Material m): centre(c), radius(r), radiusInv(1 / r), material(m) {}
+		Sphere(float3 c, float r, Material m): centre(c), radius(r), material(m) {}
 
 		// check if ray intersects sphere
 		bool intersect(HitInfo& hitInfo, const Ray& ray, float tMin, float tMax) const {
 
-			// solve quadratic vector equation
-			float3 oc = centre - ray.o;
-			float b = dot(ray.d, oc);
-			float c = dot(oc, oc) - radius * radius;
+			// first try ...
+			// float3 oc = centre - ray.o;
+			// float b = dot(ray.d, oc);
+			// float c = dot(oc, oc) - radius * radius;
+			// float discriminant = b * b - c;
+			// if (discriminant < 0) return false;
+			// discriminant = sqrtf(discriminant);
+			// float t = b - discriminant;
+			// if (t < tMin || tMax < t) {
+			// 	t = b + discriminant;
+			// 	if (t < tMin || tMax < t) return false;
+			// }
+
+			// second try ...
+			const float3 oc = ray.o - centre;
+			const float b = dot(ray.d, oc);
+			const float c = dot(oc, oc) - radius * radius;
 			float discriminant = b * b - c;
-
-			// no intersection
 			if (discriminant < 0) return false;
-
-			// intersection
 			discriminant = sqrtf(discriminant);
+			const float t1 = -b + discriminant;
+			const float t2 = -b - discriminant;
+			if (t1 <= 0 || t2 <= 0) return false;
+			const float t = std::min(t1, t2);
 
-			// find minimum t
-			float t = b - discriminant;
-			if (t < tMin || tMax < t) {
-				t = b + discriminant;
-				if (t < tMin || tMax < t) {
-					return false;
-				}
-			}
-
-			// set hit info and return
+			// hit info
 			hitInfo.t = t;
 			hitInfo.P = ray.o + hitInfo.t * ray.d;
 			hitInfo.G = normalize(hitInfo.P - centre);
@@ -1584,8 +1589,7 @@ static float3 pathShader(Ray ray) {
 	float3 radiance(0.0f), throughput(1.0f);
 
 	// multiple importance sampling
-	float probBRDF = 0.0f;
-	float probLight = 0.0f;
+	float probLight(0.0f), probBRDF(0.0f);
 
 	// hit specular material
 	bool specular = false;
@@ -1609,6 +1613,15 @@ static float3 pathShader(Ray ray) {
 
 			// multiple importance sampling
 			else radiance += (probBRDF / (probBRDF + probLight)) * throughput * hitInfo.material->emission;
+
+
+
+			///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+			if (std::isnan(radiance.x) || std::isnan(radiance.y) || std::isnan(radiance.z)) std::cout << "probL: " << probLight << ", probB: " << probBRDF << std::endl; //////////
+			///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
 		}
 
 		// hit specular material
@@ -1648,13 +1661,17 @@ static float3 pathShader(Ray ray) {
 		// check visibility
 		HitInfo shadowHitInfo;
 		if (globalScene.intersect(shadowHitInfo, Ray(hitPoint, wi)) && shadowHitInfo.material->type == LIGHT) {
-			const float weight = 1 / (probLight + hitInfo.material->pdf(hitInfo.G, wi));
-			radiance += weight * throughput * hitInfo.material->spectrum() * light->material.emission * dot(hitInfo.G, wi);
+			probBRDF = hitInfo.material->pdf(hitInfo.G, wi);
+			if (probBRDF > 0) {
+				const float weight = 1 / (probLight + probBRDF);
+				radiance += weight * throughput * hitInfo.material->spectrum() * light->material.emission * dot(hitInfo.G, wi);
+			}
 		}
 
 		// continue path and update throughput
 		ray = Ray(hitPoint, hitInfo.material->sample(wo, hitInfo.G));
 		probBRDF = hitInfo.material->pdf(hitInfo.G, ray.d);
+		if (probBRDF < 0) probBRDF = 0;
 		throughput *= hitInfo.material->Kd;
 		specular = false;
 
@@ -1667,6 +1684,25 @@ static float3 pathShader(Ray ray) {
 				else break;
 			}
 		}
+
+
+
+		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+		if (std::isnan(radiance.x) || std::isnan(radiance.y) || std::isnan(radiance.z)) std::cout << "radiance" << std::endl; /////////////////////////////////////////////////////
+		if (std::isnan(throughput.x) || std::isnan(throughput.y) || std::isnan(throughput.z)) std::cout << "throughput" << std::endl;
+		if (std::isnan(probBRDF)) std::cout << "probBRDF" << std::endl;
+		if (std::isnan(probLight)) std::cout << "probLight" << std::endl;
+		if (oneOverDistanceSquared < 0) std::cout << "distance is negative" << std::endl;
+		if (std::isnan(cosThetaMax)) std::cout << "cosThetaMax" << std::endl;
+		if (std::isnan(cosTheta)) std::cout << "cosTheta" << std::endl;
+		if (std::isnan(sinTheta)) std::cout << "sinTheta" << std::endl;
+		if (std::isnan(phi)) std::cout << "phi" << std::endl;
+		if (std::isnan(wi.x) || std::isnan(wi.y) || std::isnan(wi.z)) std::cout << "wi" << std::endl;
+		if (std::isnan(ray.d.x) || std::isnan(ray.d.y) || std::isnan(ray.d.z)) std::cout << "ray.d" << std::endl;
+		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
 	}
 
 	// return radiance

@@ -10,8 +10,8 @@
     (i) specular reflection - done
     (ii) specular refraction w/ Fresnel - do later
     (iii) microfacet model for rough metal - do later
-5. Volumetric scattering - do next
-6. Atmospheric scattering - do next
+5. Volumetric scattering - ray marching
+6. Atmospheric scattering - Beer, Rayleigh, Mie
 7. Build scene - do later
 
 
@@ -31,6 +31,7 @@
 * specular refraction & fresnel
 * filter camera rays
 * BRDF models
+* SAH-BVH
 
 
 
@@ -45,11 +46,7 @@ material class allows direction sample
 make sphere a class, and then can add material, which can sample the spectrum or power
 geometry class with material, intersection, etc.
 try TEV for viewing output
-
 * better OOP - multiple files for classes, separate header/implementation, etc.
 * get rid of jaggies, aliasing in simple shapes, can see lines in shaded surfaces
-
-
-
-## Questions:
-* what else can we add to unidirectional pt - RR, NEE, MIS, ... ?   >>>   path guiding
+* fix SAH-BVH
+* fix image class with my own gamma correction and tone mapping
