@@ -19,8 +19,6 @@
 inline float clamp(const float x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
 inline int toInt(const float x) { return int(pow(clamp(x), 1 / 2.2) * 255 + .5); }
 
-
-
 // render
 int main(const int argc, const char* argv[]) {
 
@@ -48,20 +46,12 @@ int main(const int argc, const char* argv[]) {
     }
     globalScene.addObject(&mesh);
 
-
-    
-    ///////////////////////////////////////////////////////////////////////////////////////////////
-    // lighting - camera is at (0, 0, 1.5) - looking towards -z
-    float3 centre(-0.25f, 0.25f, -0.25f);
-    float radius(0.025f);
-    Material material;
-    material.type = LIGHT;
-    material.emission = float3(100.0f);
-    Sphere light(centre, radius, material);
+    // set up lighting
+    Material lightMaterial;
+    lightMaterial.type = LIGHT;
+    lightMaterial.emission = float3(100.0f);
+    Sphere light(float3(-0.25f, 0.25f, -0.25f), 0.025f, lightMaterial);
     globalScene.addLight(&light);
-    ///////////////////////////////////////////////////////////////////////////////////////////////
-
-
 
     // path trace
     globalScene.preCalc();
