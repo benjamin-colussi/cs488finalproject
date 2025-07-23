@@ -16,9 +16,7 @@ using namespace linalg::aliases;
 #include <iostream>
 #include <cfloat>
 #include <vector>
-#include <cmath> // for isnan() debugging
-#include <cassert> // for assert() debugging
-#include <climits> // for SAH-BVH
+#include <cmath>
 
 // global constants
 constexpr float PI = 3.14159265358979f;
@@ -132,7 +130,8 @@ enum MaterialType {
 	LAMBERTIAN,
 	METAL,
 	GLASS,
-	LIGHT
+	LIGHT,
+	ATMOSPHERE
 };
 
 // uber material
@@ -1444,14 +1443,14 @@ class Scene {
 
 		// scene components
 		std::vector<TriangleMesh*> objects;
-		std::vector<Sphere*> lights; // change this to list of geometry pointers
+		std::vector<Sphere*> balls; // change this to list of geometry pointers
 		std::vector<BVH> bvhs;
 
 		// add object triangle mesh to scene
 		void addObject(TriangleMesh* pObj) { objects.push_back(pObj); }
 
 		// add spherical light source to scene
-		void addLight(Sphere* pObj) { lights.push_back(pObj); }
+		void addBall(Sphere* pObj) { balls.push_back(pObj); }
 
 		// compute BVH
 		void preCalc() {
@@ -1492,8 +1491,8 @@ class Scene {
 					}
 				}
 			}
-			for (int i = 0, i_n = static_cast<int>(lights.size()); i < i_n; ++i) {
-				if (lights[i]->intersect(tempMinHit, ray, tMin, tMax)) {
+			for (int i = 0, i_n = static_cast<int>(balls.size()); i < i_n; ++i) {
+				if (balls[i]->intersect(tempMinHit, ray, tMin, tMax)) {
 					if (tempMinHit.t < minHit.t) {
 						hit = true;
 						minHit = tempMinHit;
@@ -1598,111 +1597,149 @@ static float3 pathShader(Ray ray) {
 	int pathLength = 0;
 	while (true) {
 
-		// check intersection
+
+
+		// sample exponential for random distance
+		const float ca(0.0f), cs(1.0f);
+		const float ct = ca + cs;
+		const float s = -std::log(1 - PCG32::rand()) / ct;
+
+		// no intersection
 		HitInfo hitInfo;
-		if (globalScene.intersect(hitInfo, ray) == false) break;
-		const float3 hitPoint = hitInfo.P + hitInfo.G * EPSILON;
-		const float3 wo = -ray.d;
-		++pathLength;
-
-		// hit emissive material
-		if (hitInfo.material->type == LIGHT) {
-
-			// camera ray intersection or hit specular material
-			if (pathLength == 1 || specular) radiance += throughput * hitInfo.material->emission;
-
-			// multiple importance sampling
-			else radiance += (probBRDF / (probBRDF + probLight)) * throughput * hitInfo.material->emission;
+		if (!globalScene.intersect(hitInfo, ray)) break;
 
 
 
-			///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-			if (std::isnan(radiance.x) || std::isnan(radiance.y) || std::isnan(radiance.z)) std::cout << "probL: " << probLight << ", probB: " << probBRDF << std::endl; //////////
-			///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+		// volume
+		else if (s < hitInfo.t) {
 
+			// point within medium
+			const float3 pointInSpace = ray.o + s * ray.d;
+			const float pdf = ct * std::exp(-ct * s);
+			// throughput *= transmittance; // made it quite dark ...
 
+			// next event estimation
+			const int k = 0;
+			const Sphere* light = globalScene.balls[k];
+			float3 lightNormal = light->centre - pointInSpace;
+			const float oneOverDistanceSquared = 1 / dot(lightNormal, lightNormal);
+			lightNormal *= sqrtf(oneOverDistanceSquared);
 
+			// random friends
+			const float Bertrand = PCG32::rand();
+			const float Randolf = PCG32::rand();
+
+			// calculate random direction towards visible spherical cap
+			const float cosThetaMax = sqrtf(std::max(0.0f, 1 - light->radius * light->radius * oneOverDistanceSquared));
+			probLight = 1 / (2 * PI * (1 - cosThetaMax));
+			const float cosTheta = 1 + (cosThetaMax - 1) * Bertrand;
+			const float sinTheta = sqrtf(1 - cosTheta * cosTheta);
+			const float phi = 2 * PI * Randolf;
+
+			// build orthonormal basis and centre about light normal
+			const float sign = copysignf(1, lightNormal.z);
+			const float a = -1 / (sign + lightNormal.z);
+			const float b = lightNormal.x * lightNormal.y * a;
+			const float3 b1 = float3(1 + sign * lightNormal.x * lightNormal.x * a, sign * b, -sign * lightNormal.x);
+			const float3 b2 = float3(b, sign + lightNormal.y * lightNormal.y * a, -lightNormal.y);
+			const float3 wi = cosTheta * lightNormal + sinTheta * std::cos(phi) * b1 + sinTheta * std::sin(phi) * b2;
+
+			// check visibility
+			HitInfo shadowHitInfo;
+			if (globalScene.intersect(shadowHitInfo, Ray(pointInSpace, wi)) && shadowHitInfo.material->type == LIGHT) {
+				const float3 numerator = std::exp(-ct * shadowHitInfo.t) * cs * ONE_OVER_FOUR_PI * light->material.emission; // might need a geometry term ... ?
+				const float denominator = pdf * probLight;
+				radiance += throughput * numerator / denominator;
+			}
+
+			// random scattered direction
+			const float z = PCG32::rand();
+			const float r = sqrtf(1 - z * z);
+			const float butt = 2 * PI * PCG32::rand();
+			ray = Ray(pointInSpace, float3(r * std::cos(butt), r * std::sin(butt), z));
 		}
 
-		// hit specular material
-		else if (hitInfo.material->type == METAL) {
-			throughput *= hitInfo.material->Ks;
+
+
+		// surface
+		else {
+
+			// doink hit point away from surface
+			const float3 hitPoint = hitInfo.P + EPSILON * hitInfo.G;
+			const float3 wo = -ray.d;
+			++pathLength;
+
+			// hit emissive material
+			if (hitInfo.material->type == LIGHT) {
+
+				// camera ray intersection or hit specular material
+				if (pathLength == 1 || specular) radiance += throughput * hitInfo.material->emission;
+
+				// multiple importance sampling
+				else radiance += (probBRDF / (probBRDF + probLight)) * throughput * hitInfo.material->emission;
+			}
+
+			// hit specular material
+			else if (hitInfo.material->type == METAL) {
+				throughput *= hitInfo.material->Ks;
+				ray = Ray(hitPoint, hitInfo.material->sample(wo, hitInfo.G));
+				specular = true;
+				continue;
+			}
+
+			// next event estimation
+			const int k = 0;
+			const Sphere* light = globalScene.balls[k];
+			float3 lightNormal = light->centre - hitPoint;
+			const float oneOverDistanceSquared = 1 / dot(lightNormal, lightNormal);
+			lightNormal *= sqrtf(oneOverDistanceSquared);
+
+			// random friends
+			const float Bertrand = PCG32::rand();
+			const float Randolf = PCG32::rand();
+
+			// calculate random direction towards visible spherical cap
+			const float cosThetaMax = sqrtf(std::max(0.0f, 1 - light->radius * light->radius * oneOverDistanceSquared));
+			probLight = 1 / (2 * PI * (1 - cosThetaMax));
+			const float cosTheta = 1 + (cosThetaMax - 1) * Bertrand;
+			const float sinTheta = sqrtf(1 - cosTheta * cosTheta);
+			const float phi = 2 * PI * Randolf;
+
+			// build orthonormal basis and centre about light normal
+			const float sign = copysignf(1, lightNormal.z);
+			const float a = -1 / (sign + lightNormal.z);
+			const float b = lightNormal.x * lightNormal.y * a;
+			const float3 b1 = float3(1 + sign * lightNormal.x * lightNormal.x * a, sign * b, -sign * lightNormal.x);
+			const float3 b2 = float3(b, sign + lightNormal.y * lightNormal.y * a, -lightNormal.y);
+			const float3 wi = cosTheta * lightNormal + sinTheta * std::cos(phi) * b1 + sinTheta * std::sin(phi) * b2;
+
+			// check visibility
+			HitInfo shadowHitInfo;
+			if (globalScene.intersect(shadowHitInfo, Ray(hitPoint, wi)) && shadowHitInfo.material->type == LIGHT) {
+				probBRDF = hitInfo.material->pdf(hitInfo.G, wi);
+				if (probBRDF > 0) {
+					const float weight = 1 / (probLight + probBRDF);
+					radiance += weight * throughput * hitInfo.material->spectrum() * light->material.emission * dot(hitInfo.G, wi);
+				}
+			}
+
+			// continue path and update throughput
 			ray = Ray(hitPoint, hitInfo.material->sample(wo, hitInfo.G));
-			specular = true;
-			continue;
-		}
+			probBRDF = hitInfo.material->pdf(hitInfo.G, ray.d);
+			if (probBRDF < 0) probBRDF = 0;
+			throughput *= hitInfo.material->Kd;
+			specular = false;
 
-		// next event estimation
-		const int k = 0;
-		const Sphere* light = globalScene.lights[k];
-		float3 lightNormal = light->centre - hitPoint;
-		const float oneOverDistanceSquared = 1 / dot(lightNormal, lightNormal);
-		lightNormal *= sqrtf(oneOverDistanceSquared);
-
-		// random friends
-		const float Bertrand = PCG32::rand();
-		const float Randolf = PCG32::rand();
-
-		// calculate random direction towards visible spherical cap
-		const float cosThetaMax = sqrtf(std::max(0.0f, 1 - light->radius * light->radius * oneOverDistanceSquared));
-		probLight = 1 / (2 * PI * (1 - cosThetaMax));
-		const float cosTheta = 1 + (cosThetaMax - 1) * Bertrand;
-		const float sinTheta = sqrtf(1 - cosTheta * cosTheta);
-		const float phi = 2 * PI * Randolf;
-
-		// build orthonormal basis and centre about light normal
-		const float sign = copysignf(1, lightNormal.z);
-		const float a = -1 / (sign + lightNormal.z);
-		const float b = lightNormal.x * lightNormal.y * a;
-		const float3 b1 = float3(1 + sign * lightNormal.x * lightNormal.x * a, sign * b, -sign * lightNormal.x);
-		const float3 b2 = float3(b, sign + lightNormal.y * lightNormal.y * a, -lightNormal.y);
-		const float3 wi = cosTheta * lightNormal + sinTheta * std::cos(phi) * b1 + sinTheta * std::sin(phi) * b2;
-
-		// check visibility
-		HitInfo shadowHitInfo;
-		if (globalScene.intersect(shadowHitInfo, Ray(hitPoint, wi)) && shadowHitInfo.material->type == LIGHT) {
-			probBRDF = hitInfo.material->pdf(hitInfo.G, wi);
-			if (probBRDF > 0) {
-				const float weight = 1 / (probLight + probBRDF);
-				radiance += weight * throughput * hitInfo.material->spectrum() * light->material.emission * dot(hitInfo.G, wi);
+			// russian roulette
+			if (pathLength > MINIMUM_PATH_LENGTH) {
+				float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
+				if (probabilityOfContinuing < 1) {
+					probabilityOfContinuing = std::max(0.25f, probabilityOfContinuing);
+					if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
+					else break;
+				}
 			}
 		}
-
-		// continue path and update throughput
-		ray = Ray(hitPoint, hitInfo.material->sample(wo, hitInfo.G));
-		probBRDF = hitInfo.material->pdf(hitInfo.G, ray.d);
-		if (probBRDF < 0) probBRDF = 0;
-		throughput *= hitInfo.material->Kd;
-		specular = false;
-
-		// russian roulette
-		if (pathLength > MINIMUM_PATH_LENGTH) {
-			float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
-			if (probabilityOfContinuing < 1) {
-				probabilityOfContinuing = std::max(0.25f, probabilityOfContinuing);
-				if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
-				else break;
-			}
-		}
-
-
-
-		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-		if (std::isnan(radiance.x) || std::isnan(radiance.y) || std::isnan(radiance.z)) std::cout << "radiance" << std::endl; /////////////////////////////////////////////////////
-		if (std::isnan(throughput.x) || std::isnan(throughput.y) || std::isnan(throughput.z)) std::cout << "throughput" << std::endl;
-		if (std::isnan(probBRDF)) std::cout << "probBRDF" << std::endl;
-		if (std::isnan(probLight)) std::cout << "probLight" << std::endl;
-		if (oneOverDistanceSquared < 0) std::cout << "distance is negative" << std::endl;
-		if (std::isnan(cosThetaMax)) std::cout << "cosThetaMax" << std::endl;
-		if (std::isnan(cosTheta)) std::cout << "cosTheta" << std::endl;
-		if (std::isnan(sinTheta)) std::cout << "sinTheta" << std::endl;
-		if (std::isnan(phi)) std::cout << "phi" << std::endl;
-		if (std::isnan(wi.x) || std::isnan(wi.y) || std::isnan(wi.z)) std::cout << "wi" << std::endl;
-		if (std::isnan(ray.d.x) || std::isnan(ray.d.y) || std::isnan(ray.d.z)) std::cout << "ray.d" << std::endl;
-		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-
 	}
 
 	// return radiance
@@ -1798,5 +1835,27 @@ static float3 pathShader(Ray ray) {
 	// return radiance
 	return radiance;
 }
+
+*/
+
+/*
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+if (std::isnan(radiance.x) || std::isnan(radiance.y) || std::isnan(radiance.z)) std::cout << "probL: " << probLight << ", probB: " << probBRDF << std::endl; //////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+if (std::isnan(radiance.x) || std::isnan(radiance.y) || std::isnan(radiance.z)) std::cout << "radiance" << std::endl; /////////////////////////////////////////////////////
+if (std::isnan(throughput.x) || std::isnan(throughput.y) || std::isnan(throughput.z)) std::cout << "throughput" << std::endl;
+if (std::isnan(probBRDF)) std::cout << "probBRDF" << std::endl;
+if (std::isnan(probLight)) std::cout << "probLight" << std::endl;
+if (oneOverDistanceSquared < 0) std::cout << "distance is negative" << std::endl;
+if (std::isnan(cosThetaMax)) std::cout << "cosThetaMax" << std::endl;
+if (std::isnan(cosTheta)) std::cout << "cosTheta" << std::endl;
+if (std::isnan(sinTheta)) std::cout << "sinTheta" << std::endl;
+if (std::isnan(phi)) std::cout << "phi" << std::endl;
+if (std::isnan(wi.x) || std::isnan(wi.y) || std::isnan(wi.z)) std::cout << "wi" << std::endl;
+if (std::isnan(ray.d.x) || std::isnan(ray.d.y) || std::isnan(ray.d.z)) std::cout << "ray.d" << std::endl;
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 */

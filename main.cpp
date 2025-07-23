@@ -47,11 +47,20 @@ int main(const int argc, const char* argv[]) {
     globalScene.addObject(&mesh);
 
     // set up lighting
-    Material lightMaterial;
-    lightMaterial.type = LIGHT;
-    lightMaterial.emission = float3(100.0f);
-    Sphere light(float3(-0.25f, 0.25f, -0.25f), 0.025f, lightMaterial);
-    globalScene.addLight(&light);
+    Material light;
+    light.type = LIGHT;
+    light.emission = float3(100.0f);
+    Sphere lightBall = Sphere(float3(-0.25f, 0.25f, -0.25f), 0.025f, light);
+    globalScene.addBall(&lightBall);
+
+    // balls
+    // Material metal;
+    // metal.type = METAL;
+    // metal.Ks = float3(0.64f);
+    // Sphere leftBall = Sphere(float3(-1.0f, 0.0f, 0.0f), 0.7f, metal);
+    // Sphere rightBall = Sphere(float3(1.0f, 0.0f, 0.0f), 0.7f, metal);
+    // globalScene.addBall(&leftBall);
+    // globalScene.addBall(&rightBall);
 
     // path trace
     globalScene.preCalc();
