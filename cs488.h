@@ -28,7 +28,11 @@ constexpr float ONE_OVER_FOUR_PI = 1.0f / (4.0f * PI);
 constexpr float Deg_To_Rad = PI / 180.0f;
 constexpr float Rad_To_Deg = 180.0f / PI;
 constexpr float EPSILON = 5e-5f;
-constexpr float REFR_INDEX_AIR = 1.00029f;
+constexpr float REFR_IND_AIR = 1.00029f;
+constexpr float REFR_IND_GLASS = 1.458f;
+constexpr float AIR_TO_GLASS = REFR_IND_AIR / REFR_IND_GLASS;
+constexpr float GLASS_TO_AIR = REFR_IND_GLASS / REFR_IND_AIR;
+constexpr float AIR_GLASS_R = (REFR_IND_AIR - REFR_IND_GLASS) * (REFR_IND_AIR - REFR_IND_GLASS) / ((REFR_IND_AIR + REFR_IND_GLASS) * (REFR_IND_AIR + REFR_IND_GLASS));
 
 // window size and resolution
 constexpr int globalWidth = 512;
@@ -67,11 +71,15 @@ namespace PCG32 {
 // global constants and variables
 constexpr int MINIMUM_PATH_LENGTH = 0;
 constexpr int MAXIMUM_PATH_LENGTH = 10;
+constexpr float ABSORPTION = 0.0f;
+constexpr float SCATTERING = 1.0f;
+constexpr float ATTENUATION = ABSORPTION + SCATTERING;
+constexpr float ONE_OVER_ATTENUATION = 1.0f / ATTENUATION;
 
 // switches
 constexpr bool SAMPLE_UNIFORM_HEMISPHERE = false;
 constexpr bool SAMPLE_COS_WEIGHTED_HEMISPHERE = true;
-constexpr bool ATMOSPHERIC_SCATTERING = true;
+constexpr bool ATMOSPHERIC_SCATTERING = false;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -197,72 +205,44 @@ class Material {
 		// sample direction
 		float3 sample(const float3& wo, const float3& n) const {
 
-			// perfect diffuse
+			// perfect diffuse reflection
 			if (type == LAMBERTIAN || type == LIGHT) {
 
-				// using spherical coordinates
-				if (SAMPLE_UNIFORM_HEMISPHERE) {
-
-					// using spherical coordinates
-					const float z = PCG32::rand();
-					const float r = sqrtf(1 - z * z);
-					const float phi = 2 * PI * PCG32::rand();
-					float3 d = float3(r * std::cos(phi), r * std::sin(phi), z);
-
-					// flip on normal
-					if (dot(n, d) < 0) d *= -1;
-					return d;
-
-					// build orthonormal basis with normal
-					// const float sign = copysignf(1, n.z);
-					// const float a = -1 / (sign + n.z);
-					// const float b = n.x * n.y * a;
-					// const float3 b1 = float3(1 + sign * n.x * n.x * a, sign * b, -sign * n.x);
-					// const float3 b2 = float3(b, sign + n.y * n.y * a, -n.y);
-
-					// centre about normal
-					// return d.x * b1 + d.y * b2 + d.z * n;
+				// sample unit disk
+				float x = 2 * PCG32::rand() - 1;
+				float y = 2 * PCG32::rand() - 1;
+				if (x == 0 && y == 0) return float3(x, y, 1);
+				float theta, r;
+				if (std::abs(x) > std::abs(y)) {
+					r = x;
+					theta = PI_OVER_FOUR * (y / x);
 				}
-
-				// using malley's method
-				else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) {
-
-					// sample unit disk
-					float x = 2 * PCG32::rand() - 1;
-					float y = 2 * PCG32::rand() - 1;
-					if (x == 0 && y == 0) return float3(x, y, 1);
-					float theta, r;
-					if (std::abs(x) > std::abs(y)) {
-						r = x;
-						theta = PI_OVER_FOUR * (y / x);
-					}
-					else {
-						r = y;
-						theta = PI_OVER_TWO - PI_OVER_FOUR * (x / y);
-					}
-					x = r * std::cos(theta);
-					y = r * std::sin(theta);
-
-					// project to hemisphere safely
-					float z = 1 - x * x - y * y;
-					if (z < EPSILON) z = 0;
-					else z = sqrtf(z);
-
-					// build orthonormal basis with normal
-					const float sign = copysignf(1, n.z);
-					const float a = -1 / (sign + n.z);
-					const float b = n.x * n.y * a;
-					const float3 b1 = float3(1 + sign * n.x * n.x * a, sign * b, -sign * n.x);
-					const float3 b2 = float3(b, sign + n.y * n.y * a, -n.y);
-
-					// centre about normal
-					return x * b1 + y * b2 + z * n;
+				else {
+					r = y;
+					theta = PI_OVER_TWO - PI_OVER_FOUR * (x / y);
 				}
+				x = r * std::cos(theta);
+				y = r * std::sin(theta);
+
+				// project to hemisphere safely
+				float z = 1 - x * x - y * y;
+				if (z < EPSILON) z = 0;
+				else z = sqrtf(z);
+
+				// build orthonormal basis with normal
+				const float sign = copysignf(1, n.z);
+				const float a = -1 / (sign + n.z);
+				const float b = n.x * n.y * a;
+				const float3 b1 = float3(1 + sign * n.x * n.x * a, sign * b, -sign * n.x);
+				const float3 b2 = float3(b, sign + n.y * n.y * a, -n.y);
+
+				// centre about normal
+				return x * b1 + y * b2 + z * n;
 			}
 
 			// perfect specular reflection
 			if (type == METAL) {
-				const float3 reflection = -wo - 2 * n * dot(n, -wo);
+				const float3 reflection = -wo + 2 * dot(n, wo) * n;
 				return normalize(reflection);
 			}
 
@@ -317,6 +297,7 @@ class HitInfo {
 		float3 N;
 		float2 T;
 		const Material* material;
+		bool inside;
 
 };
 
@@ -464,10 +445,19 @@ class TriangleMesh {
 			result.T = alpha * tri.texcoords[0] + beta * tri.texcoords[1] + gamma * tri.texcoords[2];
 			result.material = &materials[tri.idMaterial];
 
-			// geometric normal
+			// geometric normal for reflection
+			// float3 g = normalize(cross(ba, ca));
+			// if (dot(g, -ray.d) < 0) g *= -1;
+			// result.G = g;
+
+			// geometric normal for refraction
 			float3 g = normalize(cross(ba, ca));
-			if (dot(g, -ray.d) < 0) g *= -1;
+			if (dot(result.N, g) < 0) g *= -1;
 			result.G = g;
+
+			// inside object for refraction
+			if (dot(result.G, -ray.d) < 0) result.inside = true;
+			else result.inside = false;
 
 			// return true for hit
 			return true;
@@ -1552,7 +1542,7 @@ static Scene globalScene;
 
 
 
-// path tracing shading
+// path tracing with surface scattering
 static float3 pathShader(Ray ray) {
 
 	// radiance, throughput
@@ -1585,13 +1575,126 @@ static float3 pathShader(Ray ray) {
 			else radiance += (probBRDF / (probBRDF + probLight)) * throughput * hitInfo.material->emission;
 		}
 
-		// hit specular material
+
+
+
+
+		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+		// specular metal
 		else if (hitInfo.material->type == METAL) {
 			throughput *= hitInfo.material->Ks;
 			ray = Ray(hitPoint, hitInfo.material->sample(wo, hitInfo.G));
 			specular = true;
 			continue;
 		}
+
+		// specular glass
+		else if (hitInfo.material->type == GLASS) {
+
+			// multiply specular colour
+			throughput *= hitInfo.material->Ks;
+
+			// check if inside or outside
+			const float dotProd = dot(hitInfo.G, wo);
+
+			// reflection coefficient
+			const float c = 1 - dotProd;
+			const float R = AIR_GLASS_R + (1 - AIR_GLASS_R) * c * c * c * c * c;
+
+			// continue path
+			const float Randerson = PCG32::rand();
+			float3 origin, direction;
+
+			// outside air to glass
+			if (dotProd > 0) {
+
+				// std::cout << "out" << std::endl;
+
+				// reflect
+				if (Randerson < R) {
+
+					// std::cout << "out reflect" << std::endl;
+
+					origin = hitInfo.P + EPSILON * hitInfo.G;
+					direction = normalize(-wo + 2 * dotProd * hitInfo.G);
+					throughput /= R;
+				}
+
+				// refract
+				else {
+
+					// std::cout << "out refract" << std::endl;
+
+					origin = hitInfo.P - EPSILON * hitInfo.G;
+					const float radicand = 1 - AIR_TO_GLASS * AIR_TO_GLASS * (1 - dotProd * dotProd);
+					direction = normalize(AIR_TO_GLASS * (wo + dotProd * hitInfo.G) - sqrtf(radicand) * hitInfo.G);
+					throughput /= (1 - R);
+				}
+			}
+
+			// inside glass to air
+			else {
+
+				// std::cout << "in" << std::endl;
+
+				// check for total internal reflection
+				const float radicand = 1 - GLASS_TO_AIR * GLASS_TO_AIR * (1 - dotProd * dotProd);
+
+				// total internal reflection
+				if (radicand < 0) {
+
+					// std::cout << "in TIR" << std::endl;
+
+					origin = hitInfo.P - EPSILON * hitInfo.G;
+					direction = normalize(-wo + 2 * dotProd * hitInfo.G);
+				}
+
+				// reflect
+				else if (Randerson < R) {
+
+					// std::cout << "in reflect" << std::endl;
+
+					origin = hitInfo.P - EPSILON * hitInfo.G;
+					direction = normalize(-wo + 2 * dotProd * hitInfo.G);
+					throughput /= R;
+				}
+
+				// refract
+				else {
+
+					// std::cout << "in refract" << std::endl;
+
+					origin = hitInfo.P + EPSILON * hitInfo.G;
+					direction = normalize(GLASS_TO_AIR * (wo + dotProd * hitInfo.G) - sqrtf(radicand) * hitInfo.G);
+					throughput /= (1 - R);
+				}
+			}
+
+
+
+			// russian roulette
+			if (pathLength > MAXIMUM_PATH_LENGTH) {
+				float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
+				if (probabilityOfContinuing < 1) {
+					probabilityOfContinuing = std::max(0.25f, probabilityOfContinuing);
+					if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
+					else break;
+				}
+			}
+
+
+
+			ray = Ray(origin, direction);
+			specular = true;
+			continue;
+		}
+
+		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+
 
 		// next event estimation
 		const int k = 0;
@@ -1653,22 +1756,17 @@ static float3 pathShader(Ray ray) {
 
 
 
-// path tracing shading
+// path tracing with volume scattering
 static float3 volumeShader(Ray ray) {
 
 	// radiance, throughput
 	float3 radiance(0.0f), throughput(1.0f);
 
 	// multiple importance sampling
-	float probLight(0.0f), probBRDF(0.0f), probDistance(0.0f);
+	float probLight(0.0f), probBRDF(0.0f);
 
 	// hit specular material
 	bool specular = false;
-
-	// constants
-	constexpr float absorption(0.0f), scattering(1.0f);
-	constexpr float attenuation = absorption + scattering;
-	constexpr float oneOverAttenuation = 1 / attenuation;
 
 	// atmosphere
 	Material black;
@@ -1682,85 +1780,60 @@ static float3 volumeShader(Ray ray) {
 	int pathLength = 0;
 	while (true) {
 
-		// sample distance and check intersection
-		const float s = -std::log(1 - PCG32::rand()) * oneOverAttenuation;
-		HitInfo hitInfo;
+		// sample exponential for random distance
+		const float s = -std::log(1 - PCG32::rand()) * ONE_OVER_ATTENUATION;
 
-		// atmosphere
+		// no intersection
+		HitInfo hitInfo;
 		if (!globalScene.intersect(hitInfo, ray)) {
 			hitInfo.t = FLT_MAX;
 			hitInfo.material = &black;
 		}
+		// if (!globalScene.intersect(hitInfo, ray)) break;
 
-		// current vertex
-		float3 vertex;
-		if (s < hitInfo.t) { // 
-			vertex = ray.o + s + ray.d;
-			throughput *= oneOverAttenuation;
-		}
-		else vertex = hitInfo.P + EPSILON * hitInfo.G;
-		const float3 wo = -ray.d;
-		++pathLength;
+		// volume
+		if (s < hitInfo.t) {
 
-		// hit emissive material
-		if (hitInfo.material->type == LIGHT) {
+			// point within medium
+			const float3 pointInSpace = ray.o + s * ray.d;
+			++pathLength;
 
-			// camera ray intersection or hit specular material
-			if (pathLength == 1 || specular) radiance += throughput * hitInfo.material->emission;
+			// multiply by transmittance over pdf
+			throughput *= ONE_OVER_ATTENUATION;
 
-			// multiple importance sampling
-			else {
-				probDistance = std::exp(-attenuation * hitInfo.t);
-				probBRDF *= probDistance;
-				probLight *= probDistance;
-				radiance += (probBRDF / (probBRDF + probLight)) * throughput * hitInfo.material->emission;
-			}
-		}
+			// next event estimation
+			const int k = 0;
+			const Sphere* light = globalScene.balls[k];
+			float3 lightNormal = light->centre - pointInSpace;
+			const float oneOverDistanceSquared = 1 / dot(lightNormal, lightNormal);
+			lightNormal *= sqrtf(oneOverDistanceSquared);
 
-		// hit specular material
-		else if (hitInfo.material->type == METAL) {
-			throughput *= hitInfo.material->Ks;
-			ray = Ray(vertex, hitInfo.material->sample(wo, hitInfo.G));
-			specular = true;
-			continue;
-		}
+			// random friends
+			const float Bertrand = PCG32::rand();
+			const float Randolf = PCG32::rand();
 
-		// next event estimation
-		const int k = 0;
-		const Sphere* light = globalScene.balls[k];
-		float3 lightNormal = light->centre - vertex;
-		const float oneOverDistanceSquared = 1 / dot(lightNormal, lightNormal);
-		lightNormal *= sqrtf(oneOverDistanceSquared);
+			// calculate random direction towards visible spherical cap
+			const float cosThetaMax = sqrtf(std::max(0.0f, 1 - light->radius * light->radius * oneOverDistanceSquared));
+			probLight = 1 / (2 * PI * (1 - cosThetaMax));
+			const float cosTheta = 1 + (cosThetaMax - 1) * Bertrand;
+			const float sinTheta = sqrtf(1 - cosTheta * cosTheta);
+			const float phi = 2 * PI * Randolf;
 
-		// random friends
-		const float Bertrand = PCG32::rand();
-		const float Randolf = PCG32::rand();
+			// build orthonormal basis and centre about light normal
+			const float sign = copysignf(1, lightNormal.z);
+			const float a = -1 / (sign + lightNormal.z);
+			const float b = lightNormal.x * lightNormal.y * a;
+			const float3 b1 = float3(1 + sign * lightNormal.x * lightNormal.x * a, sign * b, -sign * lightNormal.x);
+			const float3 b2 = float3(b, sign + lightNormal.y * lightNormal.y * a, -lightNormal.y);
+			const float3 wi = cosTheta * lightNormal + sinTheta * std::cos(phi) * b1 + sinTheta * std::sin(phi) * b2;
 
-		// calculate random direction towards visible spherical cap
-		const float cosThetaMax = sqrtf(std::max(0.0f, 1 - light->radius * light->radius * oneOverDistanceSquared));
-		probLight = 1 / (2 * PI * (1 - cosThetaMax));
-		const float cosTheta = 1 + (cosThetaMax - 1) * Bertrand;
-		const float sinTheta = sqrtf(1 - cosTheta * cosTheta);
-		const float phi = 2 * PI * Randolf;
-
-		// build orthonormal basis and centre about light normal
-		const float sign = copysignf(1, lightNormal.z);
-		const float a = -1 / (sign + lightNormal.z);
-		const float b = lightNormal.x * lightNormal.y * a;
-		const float3 b1 = float3(1 + sign * lightNormal.x * lightNormal.x * a, sign * b, -sign * lightNormal.x);
-		const float3 b2 = float3(b, sign + lightNormal.y * lightNormal.y * a, -lightNormal.y);
-		const float3 wi = cosTheta * lightNormal + sinTheta * std::cos(phi) * b1 + sinTheta * std::sin(phi) * b2;
-
-		// check visibility
-		HitInfo shadowHitInfo;
-		if (globalScene.intersect(shadowHitInfo, Ray(vertex, wi)) && shadowHitInfo.material->type == LIGHT) {
-
-			// volume
-			if (s < hitInfo.t) {
+			// check visibility
+			HitInfo shadowHitInfo;
+			if (globalScene.intersect(shadowHitInfo, Ray(pointInSpace, wi)) && shadowHitInfo.material->type == LIGHT) {
 
 				// distance sampling
-				const float transmittance = std::exp(-attenuation * shadowHitInfo.t); // these both go to zero pretty quickly with increased distance
-				const float probDistance = std::exp(-attenuation * shadowHitInfo.t); // these both go to zero pretty quickly with increased distance
+				const float transmittance = std::exp(-ATTENUATION * shadowHitInfo.t); // these both go to zero pretty quickly with increased distance
+				const float probDistance = std::exp(-ATTENUATION * shadowHitInfo.t); // these both go to zero pretty quickly with increased distance
 
 				// multiple importance sampling
 				probLight = probDistance * probLight;
@@ -1768,38 +1841,92 @@ static float3 volumeShader(Ray ray) {
 				const float weight = 1 / (probLight + probBRDF);
 
 				// accumulate radiance
-				radiance += weight * throughput * transmittance * scattering * ONE_OVER_FOUR_PI * light->material.emission;
+				radiance += weight * throughput * transmittance * SCATTERING * ONE_OVER_FOUR_PI * light->material.emission;
 			}
 
-			// surface
-			else {
+			// random scattered direction
+			const float z = PCG32::rand();
+			const float r = sqrtf(1 - z * z);
+			const float butt = 2 * PI * PCG32::rand();
+			ray = Ray(pointInSpace, float3(r * std::cos(butt), r * std::sin(butt), z));
+			probBRDF = ONE_OVER_FOUR_PI;
+			throughput *= hitInfo.material->Kd;
+		}
+
+		// surface
+		else {
+
+			// doink hit point away from surface
+			const float3 hitPoint = hitInfo.P + EPSILON * hitInfo.G;
+			const float3 wo = -ray.d;
+			++pathLength;
+
+			// hit emissive material
+			if (hitInfo.material->type == LIGHT) {
+
+				// camera ray intersection or hit specular material
+				if (pathLength == 1 || specular) radiance += throughput * hitInfo.material->emission;
+
+				// multiple importance sampling
+				else {
+					const float probDistance = std::exp(-ATTENUATION * hitInfo.t);
+					probBRDF *= probDistance;
+					probLight *= probDistance;
+					radiance += (probBRDF / (probBRDF + probLight)) * throughput * hitInfo.material->emission;
+				}
+			}
+
+			// hit specular material
+			else if (hitInfo.material->type == METAL) {
+				throughput *= hitInfo.material->Ks;
+				ray = Ray(hitPoint, hitInfo.material->sample(wo, hitInfo.G));
+				specular = true;
+				continue;
+			}
+
+			// next event estimation
+			const int k = 0;
+			const Sphere* light = globalScene.balls[k];
+			float3 lightNormal = light->centre - hitPoint;
+			const float oneOverDistanceSquared = 1 / dot(lightNormal, lightNormal);
+			lightNormal *= sqrtf(oneOverDistanceSquared);
+
+			// random friends
+			const float Bertrand = PCG32::rand();
+			const float Randolf = PCG32::rand();
+
+			// calculate random direction towards visible spherical cap
+			const float cosThetaMax = sqrtf(std::max(0.0f, 1 - light->radius * light->radius * oneOverDistanceSquared));
+			probLight = 1 / (2 * PI * (1 - cosThetaMax));
+			const float cosTheta = 1 + (cosThetaMax - 1) * Bertrand;
+			const float sinTheta = sqrtf(1 - cosTheta * cosTheta);
+			const float phi = 2 * PI * Randolf;
+
+			// build orthonormal basis and centre about light normal
+			const float sign = copysignf(1, lightNormal.z);
+			const float a = -1 / (sign + lightNormal.z);
+			const float b = lightNormal.x * lightNormal.y * a;
+			const float3 b1 = float3(1 + sign * lightNormal.x * lightNormal.x * a, sign * b, -sign * lightNormal.x);
+			const float3 b2 = float3(b, sign + lightNormal.y * lightNormal.y * a, -lightNormal.y);
+			const float3 wi = cosTheta * lightNormal + sinTheta * std::cos(phi) * b1 + sinTheta * std::sin(phi) * b2;
+
+			// check visibility
+			HitInfo shadowHitInfo;
+			if (globalScene.intersect(shadowHitInfo, Ray(hitPoint, wi)) && shadowHitInfo.material->type == LIGHT) {
 				probBRDF = hitInfo.material->pdf(hitInfo.G, wi);
 				if (probBRDF > 0) {
 					const float weight = 1 / (probLight + probBRDF);
 					radiance += weight * throughput * hitInfo.material->spectrum() * light->material.emission * dot(hitInfo.G, wi);
 				}
 			}
-		}
 
-		// volume
-		if (s < hitInfo.t) {
-			const float z = PCG32::rand();
-			const float r = sqrtf(1 - z * z);
-			const float butt = 2 * PI * PCG32::rand();
-			ray = Ray(vertex, float3(r * std::cos(butt), r * std::sin(butt), z));
-			probBRDF = ONE_OVER_FOUR_PI;
-		}
-
-		// surface
-		else {
-			ray = Ray(vertex, hitInfo.material->sample(wo, hitInfo.G));
+			// continue path and update throughput
+			ray = Ray(hitPoint, hitInfo.material->sample(wo, hitInfo.G));
 			probBRDF = hitInfo.material->pdf(hitInfo.G, ray.d);
 			if (probBRDF < 0) probBRDF = 0;
+			throughput *= hitInfo.material->Kd;
+			specular = false;
 		}
-		
-		// update state
-		throughput *= hitInfo.material->Kd;
-		specular = false;
 
 		// russian roulette
 		if (pathLength > MINIMUM_PATH_LENGTH) {
@@ -1951,87 +2078,109 @@ if (std::isnan(radiance.x)) std::cout << "throughput: " << throughput.x << std::
 
 /*
 
-// path tracing shading
+// path tracing with volume scattering
 static float3 volumeShader(Ray ray) {
 
 	// radiance, throughput
 	float3 radiance(0.0f), throughput(1.0f);
 
 	// multiple importance sampling
-	float probLight(0.0f), probBRDF(0.0f);
+	float probLight(0.0f), probBRDF(0.0f), probDistance(0.0f);
 
 	// hit specular material
 	bool specular = false;
+
+	// atmosphere
+	Material black;
+	black.type = ATMOSPHERE;
+	black.Ka = float3(0.0f);
+	black.Kd = float3(0.0f);
+	black.Ks = float3(0.0f);
+	black.Ns = 5.0f;
 
 	// trace path
 	int pathLength = 0;
 	while (true) {
 
-
-
-		// constants
-		constexpr float absorption(0.0f), scattering(0.5f);
-		constexpr float attenuation = absorption + scattering;
-		constexpr float oneOverAttenuation = 1 / attenuation;
-
-		// sample exponential for random distance
-		const float s = -std::log(1 - PCG32::rand()) * oneOverAttenuation;
-
-		// no intersection
+		// sample distance and check intersection
+		const float s = -std::log(1 - PCG32::rand()) * ONE_OVER_ATTENUATION;
 		HitInfo hitInfo;
+
+		// atmosphere
 		if (!globalScene.intersect(hitInfo, ray)) {
 			hitInfo.t = FLT_MAX;
-			Material black;
-			black.Kd = float3(0.0f);
-			black.Ks = float3(0.0f);
 			hitInfo.material = &black;
 		}
 
+		// current vertex
+		float3 vertex;
+		if (s < hitInfo.t) { // 
+			vertex = ray.o + s + ray.d;
+			throughput *= ONE_OVER_ATTENUATION;
+		}
+		else vertex = hitInfo.P + EPSILON * hitInfo.G;
+		const float3 wo = -ray.d;
+		++pathLength;
 
+		// hit emissive material
+		if (s >= hitInfo.t && hitInfo.material->type == LIGHT) {
 
-		// volume
-		if (s < hitInfo.t) {
+			// camera ray intersection or hit specular material
+			if (pathLength == 1 || specular) radiance += throughput * hitInfo.material->emission;
 
-			// point within medium
-			const float3 pointInSpace = ray.o + s * ray.d;
-			++pathLength;
+			// multiple importance sampling
+			else {
+				probDistance = std::exp(-ATTENUATION * hitInfo.t);
+				probBRDF *= probDistance;
+				probLight *= probDistance;
+				radiance += (probBRDF / (probBRDF + probLight)) * throughput * hitInfo.material->emission;
+			}
+		}
 
-			// multiply by transmittance over pdf
-			throughput *= oneOverAttenuation;
+		// hit specular material
+		else if (s >= hitInfo.t && hitInfo.material->type == METAL) {
+			throughput *= hitInfo.material->Ks;
+			ray = Ray(vertex, hitInfo.material->sample(wo, hitInfo.G));
+			specular = true;
+			continue;
+		}
 
-			// next event estimation
-			const int k = 0;
-			const Sphere* light = globalScene.balls[k];
-			float3 lightNormal = light->centre - pointInSpace;
-			const float oneOverDistanceSquared = 1 / dot(lightNormal, lightNormal);
-			lightNormal *= sqrtf(oneOverDistanceSquared);
+		// next event estimation
+		const int k = 0;
+		const Sphere* light = globalScene.balls[k];
+		float3 lightNormal = light->centre - vertex;
+		const float oneOverDistanceSquared = 1 / dot(lightNormal, lightNormal);
+		lightNormal *= sqrtf(oneOverDistanceSquared);
 
-			// random friends
-			const float Bertrand = PCG32::rand();
-			const float Randolf = PCG32::rand();
+		// random friends
+		const float Bertrand = PCG32::rand();
+		const float Randolf = PCG32::rand();
 
-			// calculate random direction towards visible spherical cap
-			const float cosThetaMax = sqrtf(std::max(0.0f, 1 - light->radius * light->radius * oneOverDistanceSquared));
-			probLight = 1 / (2 * PI * (1 - cosThetaMax));
-			const float cosTheta = 1 + (cosThetaMax - 1) * Bertrand;
-			const float sinTheta = sqrtf(1 - cosTheta * cosTheta);
-			const float phi = 2 * PI * Randolf;
+		// calculate random direction towards visible spherical cap
+		const float cosThetaMax = sqrtf(std::max(0.0f, 1 - light->radius * light->radius * oneOverDistanceSquared));
+		probLight = 1 / (2 * PI * (1 - cosThetaMax));
+		const float cosTheta = 1 + (cosThetaMax - 1) * Bertrand;
+		const float sinTheta = sqrtf(1 - cosTheta * cosTheta);
+		const float phi = 2 * PI * Randolf;
 
-			// build orthonormal basis and centre about light normal
-			const float sign = copysignf(1, lightNormal.z);
-			const float a = -1 / (sign + lightNormal.z);
-			const float b = lightNormal.x * lightNormal.y * a;
-			const float3 b1 = float3(1 + sign * lightNormal.x * lightNormal.x * a, sign * b, -sign * lightNormal.x);
-			const float3 b2 = float3(b, sign + lightNormal.y * lightNormal.y * a, -lightNormal.y);
-			const float3 wi = cosTheta * lightNormal + sinTheta * std::cos(phi) * b1 + sinTheta * std::sin(phi) * b2;
+		// build orthonormal basis and centre about light normal
+		const float sign = copysignf(1, lightNormal.z);
+		const float a = -1 / (sign + lightNormal.z);
+		const float b = lightNormal.x * lightNormal.y * a;
+		const float3 b1 = float3(1 + sign * lightNormal.x * lightNormal.x * a, sign * b, -sign * lightNormal.x);
+		const float3 b2 = float3(b, sign + lightNormal.y * lightNormal.y * a, -lightNormal.y);
+		const float3 wi = cosTheta * lightNormal + sinTheta * std::cos(phi) * b1 + sinTheta * std::sin(phi) * b2;
 
-			// check visibility
-			HitInfo shadowHitInfo;
-			if (globalScene.intersect(shadowHitInfo, Ray(pointInSpace, wi)) && shadowHitInfo.material->type == LIGHT) {
+		// check visibility
+		HitInfo shadowHitInfo;
+		if (globalScene.intersect(shadowHitInfo, Ray(vertex, wi)) && shadowHitInfo.material->type == LIGHT) {
+
+			// volume
+			if (s < hitInfo.t) {
 
 				// distance sampling
-				const float transmittance = std::exp(-attenuation * shadowHitInfo.t); // these both go to zero pretty quickly with increased distance
-				const float probDistance = std::exp(-attenuation * shadowHitInfo.t); // these both go to zero pretty quickly with increased distance
+				const float transmittance = std::exp(-ATTENUATION * shadowHitInfo.t); // these both go to zero pretty quickly with increased distance
+				const float probDistance = std::exp(-ATTENUATION * shadowHitInfo.t); // these both go to zero pretty quickly with increased distance
 
 				// multiple importance sampling
 				probLight = probDistance * probLight;
@@ -2039,107 +2188,38 @@ static float3 volumeShader(Ray ray) {
 				const float weight = 1 / (probLight + probBRDF);
 
 				// accumulate radiance
-				radiance += weight * throughput * transmittance * scattering * ONE_OVER_FOUR_PI * light->material.emission;
+				radiance += weight * throughput * transmittance * SCATTERING * ONE_OVER_FOUR_PI * light->material.emission;
 			}
 
-			// random scattered direction
-			const float z = PCG32::rand();
-			const float r = sqrtf(1 - z * z);
-			const float butt = 2 * PI * PCG32::rand();
-			ray = Ray(pointInSpace, float3(r * std::cos(butt), r * std::sin(butt), z));
-			probBRDF = ONE_OVER_FOUR_PI;
-			throughput *= hitInfo.material->Kd;
-		}
-
-
-
-		// surface
-		else {
-
-			// doink hit point away from surface
-			const float3 hitPoint = hitInfo.P + EPSILON * hitInfo.G;
-			const float3 wo = -ray.d;
-			++pathLength;
-
-
-
-			// multiply by transmittance over pdf of drawing >= to hitInfo.t
-			// throughput *= oneOverAttenuation;
-
-
-
-			// hit emissive material
-			if (hitInfo.material->type == LIGHT) {
-
-				// camera ray intersection or hit specular material
-				if (pathLength == 1 || specular) radiance += throughput * hitInfo.material->emission;
-
-				// multiple importance sampling
-				else {
-
-
-
-					const float probDistance = std::exp(-attenuation * hitInfo.t);
-					probBRDF *= probDistance;
-					probLight *= probDistance;
-
-
-
-					radiance += (probBRDF / (probBRDF + probLight)) * throughput * hitInfo.material->emission;
-				}
-			}
-
-			// hit specular material
-			else if (hitInfo.material->type == METAL) {
-				throughput *= hitInfo.material->Ks;
-				ray = Ray(hitPoint, hitInfo.material->sample(wo, hitInfo.G));
-				specular = true;
-				continue;
-			}
-
-			// next event estimation
-			const int k = 0;
-			const Sphere* light = globalScene.balls[k];
-			float3 lightNormal = light->centre - hitPoint;
-			const float oneOverDistanceSquared = 1 / dot(lightNormal, lightNormal);
-			lightNormal *= sqrtf(oneOverDistanceSquared);
-
-			// random friends
-			const float Bertrand = PCG32::rand();
-			const float Randolf = PCG32::rand();
-
-			// calculate random direction towards visible spherical cap
-			const float cosThetaMax = sqrtf(std::max(0.0f, 1 - light->radius * light->radius * oneOverDistanceSquared));
-			probLight = 1 / (2 * PI * (1 - cosThetaMax));
-			const float cosTheta = 1 + (cosThetaMax - 1) * Bertrand;
-			const float sinTheta = sqrtf(1 - cosTheta * cosTheta);
-			const float phi = 2 * PI * Randolf;
-
-			// build orthonormal basis and centre about light normal
-			const float sign = copysignf(1, lightNormal.z);
-			const float a = -1 / (sign + lightNormal.z);
-			const float b = lightNormal.x * lightNormal.y * a;
-			const float3 b1 = float3(1 + sign * lightNormal.x * lightNormal.x * a, sign * b, -sign * lightNormal.x);
-			const float3 b2 = float3(b, sign + lightNormal.y * lightNormal.y * a, -lightNormal.y);
-			const float3 wi = cosTheta * lightNormal + sinTheta * std::cos(phi) * b1 + sinTheta * std::sin(phi) * b2;
-
-			// check visibility
-			HitInfo shadowHitInfo;
-			if (globalScene.intersect(shadowHitInfo, Ray(hitPoint, wi)) && shadowHitInfo.material->type == LIGHT) {
+			// surface
+			else {
 				probBRDF = hitInfo.material->pdf(hitInfo.G, wi);
 				if (probBRDF > 0) {
 					const float weight = 1 / (probLight + probBRDF);
 					radiance += weight * throughput * hitInfo.material->spectrum() * light->material.emission * dot(hitInfo.G, wi);
 				}
 			}
+		}
 
-			// continue path and update throughput
-			ray = Ray(hitPoint, hitInfo.material->sample(wo, hitInfo.G));
+		// volume
+		if (s < hitInfo.t) {
+			const float z = PCG32::rand();
+			const float r = sqrtf(1 - z * z);
+			const float butt = 2 * PI * PCG32::rand();
+			ray = Ray(vertex, float3(r * std::cos(butt), r * std::sin(butt), z));
+			probBRDF = ONE_OVER_FOUR_PI;
+		}
+
+		// surface
+		else {
+			ray = Ray(vertex, hitInfo.material->sample(wo, hitInfo.G));
 			probBRDF = hitInfo.material->pdf(hitInfo.G, ray.d);
 			if (probBRDF < 0) probBRDF = 0;
-			throughput *= hitInfo.material->Kd;
-			specular = false;
 		}
+		
+		// update state
+		throughput *= hitInfo.material->Kd;
+		specular = false;
 
 		// russian roulette
 		if (pathLength > MINIMUM_PATH_LENGTH) {

@@ -67,7 +67,7 @@ int main(const int argc, const char* argv[]) {
         Material light;
         light.type = LIGHT;
         light.emission = float3(100.0f);
-        Sphere lightBall = Sphere(float3(0.0f, 1.0f, -3.0f), 0.5f, light);
+        Sphere lightBall = Sphere(float3(0.0f, 0.5f, -3.0f), 0.15f, light);
         globalScene.addBall(&lightBall);
 
         // green
@@ -100,23 +100,18 @@ int main(const int argc, const char* argv[]) {
         metal.Ks = float3(0.64f);
 
         // balls
-        Sphere leftBall = Sphere(float3(-0.5f, -0.5f, -0.75f), 0.5f, green);
+        Sphere leftBall = Sphere(float3(-0.75f, -0.75f, -1.25f), 0.5f, green);
         globalScene.addBall(&leftBall);
-        Sphere middleBall = Sphere(float3(0.0f, -2.25f, -1.0f), 2.0f, white);
+        Sphere middleBall = Sphere(float3(0.0f, -1.25f, -1.5f), 1.0f, white);
         globalScene.addBall(&middleBall);
-        Sphere rightBall = Sphere(float3(0.5f, -0.5f, -1.25f), 0.5f, red);
+        Sphere rightBall = Sphere(float3(0.75f, -0.75f, -1.75f), 0.5f, red);
         globalScene.addBall(&rightBall);
 
-        // balls
-        // Material metal;
-        // metal.type = METAL;
-        // metal.Ks = float3(0.64f);
-        // Sphere leftBall = Sphere(float3(-50.0f, -100.0f, -150.0f), 75.0f, metal);
-        // globalScene.addBall(&leftBall);
-        // Sphere middleBall = Sphere(float3(0.0f, -1045.0f, -175.0f), 1000.0f, metal);
-        // globalScene.addBall(&middleBall);
-        // Sphere rightBall = Sphere(float3(50.0f, -100.0f, -200.0f), 75.0f, metal);
-        // globalScene.addBall(&rightBall);
+        // moons
+        Sphere greenMoon = Sphere(float3(0.27f, 0.25f, -0.5f), 0.25f, green);
+        globalScene.addBall(&greenMoon);
+        Sphere redMoon = Sphere(float3(-0.27f, 0.25f, -0.25f), 0.25f, red);
+        globalScene.addBall(&redMoon);
 
         // path trace
         globalScene.preCalc();

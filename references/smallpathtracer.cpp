@@ -74,6 +74,8 @@ Sphere spheres[] = {
 	Sphere(1.5, Vec(50,81.6-16.5,81.6), Vec(4,4,4) * 100, Vec(), DIFFUSE),
 };
 
+
+
 // global variables
 int numSpheres = sizeof(spheres) / sizeof(Sphere);
 inline double clamp(double x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
@@ -91,8 +93,12 @@ inline bool intersect(const Ray& r, double& t, int& id) {
 	return t < inf;
 }
 
+
+
 // shade
 Vec radiance(const Ray& r, int depth, unsigned short* Xi, int E = 1) {
+
+
 
 	// hit info
 	double t; // distance to intersection
@@ -107,12 +113,13 @@ Vec radiance(const Ray& r, int depth, unsigned short* Xi, int E = 1) {
 	Vec f = obj.colour; // object colour, BRDF modulator
 
 	// max reflection using russian roulette
-	// double prob = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z; // takes max value
-	// if (++depth > 5 || !prob) {
-	// 	if (erand48(Xi) < prob) f = f * (1 / prob);
-	// 	else return obj.emission * E;
-	// }
-	if (++depth > 5) return obj.emission * E;
+	double prob = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;
+	if (++depth > 5 || !prob) {
+		if (erand48(Xi) < prob) f = f * (1 / prob);
+		else return obj.emission * E;
+	}
+	// if (++depth > 5) return obj.emission * E;
+
 
 
 	// ideal diffuse reflection
@@ -137,10 +144,6 @@ Vec radiance(const Ray& r, int depth, unsigned short* Xi, int E = 1) {
 			double phi = 2 * M_PI * eps2;
 			Vec l = su * cos(phi) * sin_a + sv * sin(phi) * sin_a + sw * cos_a;
 			l.norm();
-
-			// double cos_a = 1-eps1+eps1*cos_a_max;
-			// double sin_a = sqrt(1-cos_a*cos_a);
-			// double phi = 2*M_PI*eps2;
 
 			// trace shadow ray, check if the connection is not blocked
 			if (intersect(Ray(x, l), t, id) && id == i) {
@@ -170,22 +173,45 @@ Vec radiance(const Ray& r, int depth, unsigned short* Xi, int E = 1) {
 
 
 
-	// // ideal dielectric refraction
-	// Ray reflRay(x, r.d-n*2*n.dot(r.d));
-	// bool into = n.dot(nl)>0;                // Ray from outside going in?
-	// double nc=1, nt=1.5, nnt=into?nc/nt:nt/nc, ddn=r.d.dot(nl), cos2t;
+	// ideal dielectric refraction
+	Ray reflRay(x, r.d - n * 2 * n.dot(r.d)); // reflected ray
+	bool into = n.dot(nl) > 0; // ray from outside going in?
+	double nc = 1; // refraction index of air
+	double nt = 1.5; // refraction index of glass
+	double nnt = into ? nc / nt : nt / nc;
+	double ddn = r.d.dot(nl); // dot(ray.d, geometric normal)
+	double cos2t;
 
-	// // total internal reflection
-	// if ((cos2t=1-nnt*nnt*(1-ddn*ddn))<0) return obj.emission + f.mult(radiance(reflRay,depth,Xi));
+	// total internal reflection
+	if ((cos2t = 1 - nnt * nnt * (1 - ddn * ddn)) < 0) {
+		return obj.emission + f.mult(radiance(reflRay, depth, Xi));
+	}
 
-	// // no total internal reflection
-	// Vec tdir = (r.d*nnt - n*((into?1:-1)*(ddn*nnt+sqrt(cos2t)))).norm();
-	// double a=nt-nc, b=nt+nc, R0=a*a/(b*b), c = 1-(into?-ddn:tdir.dot(n));
-	// double Re=R0+(1-R0)*c*c*c*c*c,Tr=1-Re,P=.25+.5*Re,RP=Re/P,TP=Tr/(1-P);
-	// return obj.emission + f.mult(depth>2 ? (erand48(Xi)<P ?   // Russian roulette
-	// radiance(reflRay,depth,Xi)*RP:radiance(Ray(x,tdir),depth,Xi)*TP) :
-	// radiance(reflRay,depth,Xi)*Re+radiance(Ray(x,tdir),depth,Xi)*Tr);
+	// no total internal reflection
+	Vec tdir = (r.d * nnt - n * ((into ? 1 : -1) * (ddn * nnt + sqrt(cos2t)))).norm();
+
+	double a = nt - nc;
+	double b = nt + nc;
+	double R0 = a * a / (b * b);
+
+	double c = 1 - (into ? -ddn : tdir.dot(n));
+	double Re = R0 + (1 - R0) * c * c * c * c * c; // R
+	double Tr = 1 - Re; // T
+
+	double P = 0.25 + 0.5 * Re; // clamping prob
+	double RP = Re / P; // R / P
+	double TP = Tr / (1 - P); // T / (1 - P)
+
+
+
+	// russian roulette
+	return obj.emission + f.mult(depth > 2 ? (erand48(Xi) < P ?
+		radiance(reflRay, depth, Xi) * RP :
+		radiance(Ray(x, tdir), depth, Xi) * TP) :
+		radiance(reflRay, depth, Xi) * Re + radiance(Ray(x, tdir), depth, Xi) * Tr);
 }
+
+
 
 // path tracer
 int main(int argc, char *argv[]) {

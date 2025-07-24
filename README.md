@@ -20,7 +20,7 @@
 ## Next:
 * going to have to fix my light sampling using method of projection
   because if we sample a direction towards light, and we dont have occlusion, then we should definitely have a light hit - BIAS
-* atmospheric scattering
+* atmospheric scattering - implement rayleigh later
 * specular refraction & fresnel
 * filter camera rays - i think im getting some aliasing for some reason ...
 * material models
