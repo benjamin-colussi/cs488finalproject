@@ -66,6 +66,7 @@ namespace PCG32 {
 
 // global constants and variables
 constexpr int MINIMUM_PATH_LENGTH = 0;
+constexpr int MAXIMUM_PATH_LENGTH = 10;
 
 // switches
 constexpr bool SAMPLE_UNIFORM_HEMISPHERE = false;
@@ -510,7 +511,7 @@ class TriangleMesh {
 			int* indices;
 			int* matid = nullptr;
 
-			printf("Loading \"%s\"...\n", filename);
+			printf("Loading \"%s\" ...\n", filename);
 			ParseOBJ(filename, nVertices, &vertices, &normals, &texcoords, nIndices, &indices, &matid);
 			if (nVertices == 0) return false;
 			this->triangles.resize(nIndices / 3);
@@ -709,7 +710,7 @@ class TriangleMesh {
 		int nv = 0, nn = 0, nf = 0, nt = 0;
 		char line[81];
 		if (!fp) {
-			printf("Cannot open \"%s\" for reading\n", fileName);
+			printf("Cannot open \"%s\" for reading.\n", fileName);
 			return;
 		}
 
@@ -1317,7 +1318,7 @@ void BVH::build(const TriangleMesh* mesh) {
 	}
 
 	// ---------- building BVH ----------
-	printf("Building BVH...\n");
+	printf("Building BVH ...\n");
 	splitBVH(obj_index, obj_num, bbox);
 	printf("Done.\n");
 
@@ -1599,24 +1600,34 @@ static float3 pathShader(Ray ray) {
 
 
 
+		// constants
+		constexpr float absorption(0.0f), scattering(0.5f);
+		constexpr float attenuation = absorption + scattering;
+		constexpr float oneOverAttenuation = 1 / attenuation;
+
 		// sample exponential for random distance
-		const float ca(0.0f), cs(1.0f);
-		const float ct = ca + cs;
-		const float s = -std::log(1 - PCG32::rand()) / ct;
+		const float s = -std::log(1 - PCG32::rand()) * oneOverAttenuation;
 
 		// no intersection
 		HitInfo hitInfo;
-		if (!globalScene.intersect(hitInfo, ray)) break;
+		if (!globalScene.intersect(hitInfo, ray)) {
+			hitInfo.t = FLT_MAX;
+			Material black;
+			black.Kd = float3(0.0f);
+			hitInfo.material = &black;
+		}
 
 
 
 		// volume
-		else if (s < hitInfo.t) {
+		if (s < hitInfo.t) {
 
 			// point within medium
 			const float3 pointInSpace = ray.o + s * ray.d;
-			const float pdf = ct * std::exp(-ct * s);
-			// throughput *= transmittance; // made it quite dark ...
+			++pathLength;
+
+			// multiply by transmittance over pdf
+			throughput *= oneOverAttenuation;
 
 			// next event estimation
 			const int k = 0;
@@ -1647,9 +1658,18 @@ static float3 pathShader(Ray ray) {
 			// check visibility
 			HitInfo shadowHitInfo;
 			if (globalScene.intersect(shadowHitInfo, Ray(pointInSpace, wi)) && shadowHitInfo.material->type == LIGHT) {
-				const float3 numerator = std::exp(-ct * shadowHitInfo.t) * cs * ONE_OVER_FOUR_PI * light->material.emission; // might need a geometry term ... ?
-				const float denominator = pdf * probLight;
-				radiance += throughput * numerator / denominator;
+
+				// distance sampling
+				const float transmittance = std::exp(-attenuation * shadowHitInfo.t); // these both go to zero pretty quickly with increased distance
+				const float probDistance = std::exp(-attenuation * shadowHitInfo.t); // these both go to zero pretty quickly with increased distance
+
+				// multiple importance sampling
+				probLight = probDistance * probLight;
+				probBRDF = probDistance * ONE_OVER_FOUR_PI;
+				const float weight = 1 / (probLight + probBRDF);
+
+				// accumulate radiance
+				radiance += weight * throughput * transmittance * scattering * ONE_OVER_FOUR_PI * light->material.emission;
 			}
 
 			// random scattered direction
@@ -1657,6 +1677,8 @@ static float3 pathShader(Ray ray) {
 			const float r = sqrtf(1 - z * z);
 			const float butt = 2 * PI * PCG32::rand();
 			ray = Ray(pointInSpace, float3(r * std::cos(butt), r * std::sin(butt), z));
+			probBRDF = ONE_OVER_FOUR_PI;
+			throughput *= hitInfo.material->Kd;
 		}
 
 
@@ -1669,6 +1691,13 @@ static float3 pathShader(Ray ray) {
 			const float3 wo = -ray.d;
 			++pathLength;
 
+
+
+			// multiply by transmittance over pdf of drawing >= to hitInfo.t
+			// throughput *= oneOverAttenuation;
+
+
+
 			// hit emissive material
 			if (hitInfo.material->type == LIGHT) {
 
@@ -1676,7 +1705,18 @@ static float3 pathShader(Ray ray) {
 				if (pathLength == 1 || specular) radiance += throughput * hitInfo.material->emission;
 
 				// multiple importance sampling
-				else radiance += (probBRDF / (probBRDF + probLight)) * throughput * hitInfo.material->emission;
+				else {
+
+
+
+					const float probDistance = std::exp(-attenuation * hitInfo.t);
+					probBRDF *= probDistance;
+					probLight *= probDistance;
+
+
+
+					radiance += (probBRDF / (probBRDF + probLight)) * throughput * hitInfo.material->emission;
+				}
 			}
 
 			// hit specular material
@@ -1729,15 +1769,15 @@ static float3 pathShader(Ray ray) {
 			if (probBRDF < 0) probBRDF = 0;
 			throughput *= hitInfo.material->Kd;
 			specular = false;
+		}
 
-			// russian roulette
-			if (pathLength > MINIMUM_PATH_LENGTH) {
-				float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
-				if (probabilityOfContinuing < 1) {
-					probabilityOfContinuing = std::max(0.25f, probabilityOfContinuing);
-					if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
-					else break;
-				}
+		// russian roulette
+		if (pathLength > MINIMUM_PATH_LENGTH) {
+			float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
+			if (probabilityOfContinuing < 1) {
+				probabilityOfContinuing = std::max(0.25f, probabilityOfContinuing);
+				if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
+				else break;
 			}
 		}
 	}
@@ -1858,4 +1898,23 @@ if (std::isnan(wi.x) || std::isnan(wi.y) || std::isnan(wi.z)) std::cout << "wi" 
 if (std::isnan(ray.d.x) || std::isnan(ray.d.y) || std::isnan(ray.d.z)) std::cout << "ray.d" << std::endl;
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+*/
+
+/*
+initial fog testing
+const float pdf = ct * std::exp(-ct * s);
+const float3 numerator = std::exp(-ct * shadowHitInfo.t) * cs * ONE_OVER_FOUR_PI * light->material.emission;
+const float denominator = pdf * probLight;
+radiance += throughput * numerator / denominator;
+*/
+
+/*
+std::cout << attenuation << " " << shadowHitInfo.t << std::endl;
+std::cout << probDistance << std::endl; // prob dist is 0
+std::cout << weight << " " << probLight << " " << probBRDF << std::endl; // weight is infinity, both probs are 0
+std::cout << throughput.x << " " << throughput.y << " " << throughput.z << std::endl;
+std::cout << numerator.x << " " << numerator.y << " " << numerator.z << std::endl;
+std::cout << radiance.x << " " << radiance.y << " " << radiance.z << std::endl;
+if (std::isnan(weight)) std::cout << "weight" << std::endl;
+if (std::isnan(radiance.x)) std::cout << "throughput: " << throughput.x << std::endl;
 */
