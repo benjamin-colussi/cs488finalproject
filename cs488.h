@@ -70,7 +70,6 @@ namespace PCG32 {
 
 // global constants and variables
 constexpr int MINIMUM_PATH_LENGTH = 0;
-constexpr int MAXIMUM_PATH_LENGTH = 10;
 constexpr float ABSORPTION = 0.0f;
 constexpr float SCATTERING = 1.0f;
 constexpr float ATTENUATION = ABSORPTION + SCATTERING;
@@ -1575,12 +1574,6 @@ static float3 pathShader(Ray ray) {
 			else radiance += (probBRDF / (probBRDF + probLight)) * throughput * hitInfo.material->emission;
 		}
 
-
-
-
-
-		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 		// specular metal
 		else if (hitInfo.material->type == METAL) {
 			throughput *= hitInfo.material->Ks;
@@ -1588,6 +1581,8 @@ static float3 pathShader(Ray ray) {
 			specular = true;
 			continue;
 		}
+
+
 
 		// specular glass
 		else if (hitInfo.material->type == GLASS) {
@@ -1598,10 +1593,6 @@ static float3 pathShader(Ray ray) {
 			// check if inside or outside
 			const float dotProd = dot(hitInfo.G, wo);
 
-			// reflection coefficient
-			const float c = 1 - dotProd;
-			const float R = AIR_GLASS_R + (1 - AIR_GLASS_R) * c * c * c * c * c;
-
 			// continue path
 			const float Randerson = PCG32::rand();
 			float3 origin, direction;
@@ -1609,13 +1600,12 @@ static float3 pathShader(Ray ray) {
 			// outside air to glass
 			if (dotProd > 0) {
 
-				// std::cout << "out" << std::endl;
+				// reflection coefficient
+				const float c = 1 - dotProd;
+				const float R = AIR_GLASS_R + (1 - AIR_GLASS_R) * c * c * c * c * c;
 
 				// reflect
 				if (Randerson < R) {
-
-					// std::cout << "out reflect" << std::endl;
-
 					origin = hitInfo.P + EPSILON * hitInfo.G;
 					direction = normalize(-wo + 2 * dotProd * hitInfo.G);
 					throughput /= R;
@@ -1623,12 +1613,9 @@ static float3 pathShader(Ray ray) {
 
 				// refract
 				else {
-
-					// std::cout << "out refract" << std::endl;
-
 					origin = hitInfo.P - EPSILON * hitInfo.G;
 					const float radicand = 1 - AIR_TO_GLASS * AIR_TO_GLASS * (1 - dotProd * dotProd);
-					direction = normalize(AIR_TO_GLASS * (wo + dotProd * hitInfo.G) - sqrtf(radicand) * hitInfo.G);
+					direction = normalize(AIR_TO_GLASS * (-wo + dotProd * hitInfo.G) - sqrtf(radicand) * hitInfo.G);
 					throughput /= (1 - R);
 				}
 			}
@@ -1636,25 +1623,21 @@ static float3 pathShader(Ray ray) {
 			// inside glass to air
 			else {
 
-				// std::cout << "in" << std::endl;
+				// reflection coefficient
+				const float c = 1 + dotProd;
+				const float R = AIR_GLASS_R + (1 - AIR_GLASS_R) * c * c * c * c * c;
 
 				// check for total internal reflection
 				const float radicand = 1 - GLASS_TO_AIR * GLASS_TO_AIR * (1 - dotProd * dotProd);
 
 				// total internal reflection
 				if (radicand < 0) {
-
-					// std::cout << "in TIR" << std::endl;
-
 					origin = hitInfo.P - EPSILON * hitInfo.G;
 					direction = normalize(-wo + 2 * dotProd * hitInfo.G);
 				}
 
 				// reflect
 				else if (Randerson < R) {
-
-					// std::cout << "in reflect" << std::endl;
-
 					origin = hitInfo.P - EPSILON * hitInfo.G;
 					direction = normalize(-wo + 2 * dotProd * hitInfo.G);
 					throughput /= R;
@@ -1662,37 +1645,17 @@ static float3 pathShader(Ray ray) {
 
 				// refract
 				else {
-
-					// std::cout << "in refract" << std::endl;
-
 					origin = hitInfo.P + EPSILON * hitInfo.G;
-					direction = normalize(GLASS_TO_AIR * (wo + dotProd * hitInfo.G) - sqrtf(radicand) * hitInfo.G);
+					direction = normalize(GLASS_TO_AIR * (-wo + dotProd * hitInfo.G) - sqrtf(radicand) * hitInfo.G);
 					throughput /= (1 - R);
 				}
 			}
 
-
-
-			// russian roulette
-			if (pathLength > MAXIMUM_PATH_LENGTH) {
-				float probabilityOfContinuing = std::max(throughput.x, std::max(throughput.y, throughput.z));
-				if (probabilityOfContinuing < 1) {
-					probabilityOfContinuing = std::max(0.25f, probabilityOfContinuing);
-					if (PCG32::rand() < probabilityOfContinuing) throughput /= probabilityOfContinuing;
-					else break;
-				}
-			}
-
-
-
+			// continue path
 			ray = Ray(origin, direction);
 			specular = true;
 			continue;
 		}
-
-		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
 
 
 
