@@ -44,3 +44,11 @@ try TEV for viewing output
 * fix SAH-BVH
 * fix image class with my own gamma correction and tone mapping
 * make sure my code doesnt use the small path tracer code ...
+
+
+
+## Questions:
+* what are the units of the BxDF/phase functions?
+* MIS w/ fog - how do the coefficients affect output? should they be less than 1
+* MIS w/ fog - just confirm my logic is correct
+* sampling specular materials - how do the BxDF work with importance sampling?

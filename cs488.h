@@ -17,6 +17,7 @@ using namespace linalg::aliases;
 #include <cfloat>
 #include <vector>
 #include <cmath>
+#include <cassert>
 
 // global constants
 constexpr float PI = 3.14159265358979f;
@@ -457,6 +458,16 @@ class TriangleMesh {
 			// inside object for refraction
 			if (dot(result.G, -ray.d) < 0) result.inside = true;
 			else result.inside = false;
+
+			// // calculate geometric normal to front of triangle
+			// float3 g = normalize(cross(ba, ca));
+			// // assuming the interpolated shading normal is pointing towards the front of the triangle
+			// if (dot(g, result.N) < 0) g *= -1;
+			// result.G = g;
+
+			// // check if hitting front of triangle
+			// if (dot(-ray.d, result.G) > 0) result.front = true;
+			// else result.front = false;
 
 			// return true for hit
 			return true;
@@ -1568,16 +1579,16 @@ static float3 pathShader(Ray ray) {
 		if (hitInfo.material->type == LIGHT) {
 
 			// camera ray intersection or hit specular material
-			if (pathLength == 1 || specular) radiance += throughput * hitInfo.material->emission;
+			if (pathLength == 1 || specular) radiance += throughput * hitInfo.material->emission * dot(hitInfo.G, wo);
 
 			// multiple importance sampling
-			else radiance += (probBRDF / (probBRDF + probLight)) * throughput * hitInfo.material->emission;
+			else radiance += (probBRDF / (probBRDF + probLight)) * throughput * hitInfo.material->emission * dot(hitInfo.G, wo);
 		}
 
 		// specular metal
 		else if (hitInfo.material->type == METAL) {
-			throughput *= hitInfo.material->Ks;
 			ray = Ray(hitPoint, hitInfo.material->sample(wo, hitInfo.G));
+			throughput *= hitInfo.material->Ks;
 			specular = true;
 			continue;
 		}
@@ -1587,36 +1598,36 @@ static float3 pathShader(Ray ray) {
 		// specular glass
 		else if (hitInfo.material->type == GLASS) {
 
-			// multiply specular colour
-			throughput *= hitInfo.material->Ks;
-
-			// check if inside or outside
-			const float dotProd = dot(hitInfo.G, wo);
-
 			// continue path
 			const float Randerson = PCG32::rand();
 			float3 origin, direction;
 
 			// outside air to glass
-			if (dotProd > 0) {
+			if (!hitInfo.inside) {
 
 				// reflection coefficient
-				const float c = 1 - dotProd;
+				const float c = 1 - dot(hitInfo.G, -ray.d);
 				const float R = AIR_GLASS_R + (1 - AIR_GLASS_R) * c * c * c * c * c;
 
 				// reflect
 				if (Randerson < R) {
 					origin = hitInfo.P + EPSILON * hitInfo.G;
-					direction = normalize(-wo + 2 * dotProd * hitInfo.G);
-					throughput /= R;
+					// direction = normalize(-wo + 2 * dotProd * hitInfo.G);
+					direction = normalize(ray.d - 2 * dot(ray.d, hitInfo.G) * hitInfo.G);
+					// throughput /= R;
+					if (dot(hitInfo.G, direction) < 0) direction -= 2 * dot(hitInfo.G, direction) * hitInfo.G;
 				}
 
 				// refract
 				else {
 					origin = hitInfo.P - EPSILON * hitInfo.G;
-					const float radicand = 1 - AIR_TO_GLASS * AIR_TO_GLASS * (1 - dotProd * dotProd);
-					direction = normalize(AIR_TO_GLASS * (-wo + dotProd * hitInfo.G) - sqrtf(radicand) * hitInfo.G);
-					throughput /= (1 - R);
+					// const float radicand = 1 - AIR_TO_GLASS * AIR_TO_GLASS * (1 - dotProd * dotProd);
+					const float radicand = 1 - AIR_TO_GLASS * AIR_TO_GLASS * (1 - dot(ray.d, hitInfo.G) * dot(ray.d, hitInfo.G));
+					// direction = normalize(AIR_TO_GLASS * (-wo + dotProd * hitInfo.G) - sqrtf(radicand) * hitInfo.G);
+					// direction = normalize(AIR_TO_GLASS * (wo - dotProd * hitInfo.G) - sqrtf(radicand) * hitInfo.G);
+					direction = normalize(AIR_TO_GLASS * (ray.d - dot(ray.d, hitInfo.G) * hitInfo.G) - sqrtf(radicand) * hitInfo.G);
+					// throughput /= (1 - R);
+					if (dot(hitInfo.G, direction) > 0) direction -= 2 * dot(hitInfo.G, direction) * hitInfo.G;
 				}
 			}
 
@@ -1624,30 +1635,37 @@ static float3 pathShader(Ray ray) {
 			else {
 
 				// reflection coefficient
-				const float c = 1 + dotProd;
+				const float c = 1 + dot(hitInfo.G, -ray.d);
 				const float R = AIR_GLASS_R + (1 - AIR_GLASS_R) * c * c * c * c * c;
 
 				// check for total internal reflection
-				const float radicand = 1 - GLASS_TO_AIR * GLASS_TO_AIR * (1 - dotProd * dotProd);
+				// const float radicand = 1 - GLASS_TO_AIR * GLASS_TO_AIR * (1 - dotProd * dotProd);
+				const float radicand = 1 - GLASS_TO_AIR * GLASS_TO_AIR * (1 - dot(ray.d, hitInfo.G) * dot(ray.d, hitInfo.G));
 
 				// total internal reflection
 				if (radicand < 0) {
 					origin = hitInfo.P - EPSILON * hitInfo.G;
-					direction = normalize(-wo + 2 * dotProd * hitInfo.G);
+					// direction = normalize(-wo + 2 * dotProd * hitInfo.G);
+					direction = normalize(ray.d - 2 * dot(ray.d, hitInfo.G) * hitInfo.G);
+					if (dot(hitInfo.G, direction) > 0) direction -= 2 * dot(hitInfo.G, direction) * hitInfo.G;
 				}
 
 				// reflect
 				else if (Randerson < R) {
 					origin = hitInfo.P - EPSILON * hitInfo.G;
-					direction = normalize(-wo + 2 * dotProd * hitInfo.G);
-					throughput /= R;
+					// direction = normalize(-wo + 2 * dotProd * hitInfo.G);
+					direction = normalize(ray.d - 2 * dot(ray.d, hitInfo.G) * hitInfo.G);
+					// throughput /= R;
+					if (dot(hitInfo.G, direction) > 0) direction -= 2 * dot(hitInfo.G, direction) * hitInfo.G;
 				}
 
 				// refract
 				else {
 					origin = hitInfo.P + EPSILON * hitInfo.G;
-					direction = normalize(GLASS_TO_AIR * (-wo + dotProd * hitInfo.G) - sqrtf(radicand) * hitInfo.G);
-					throughput /= (1 - R);
+					// direction = normalize(GLASS_TO_AIR * (-wo + dotProd * hitInfo.G) - sqrtf(radicand) * hitInfo.G);
+					direction = normalize(AIR_TO_GLASS * (ray.d - dot(ray.d, hitInfo.G) * hitInfo.G) - sqrtf(radicand) * hitInfo.G);
+					// throughput /= (1 - R);
+					if (dot(hitInfo.G, direction) < 0) direction -= 2 * dot(hitInfo.G, direction) * hitInfo.G;
 				}
 			}
 
@@ -1813,7 +1831,7 @@ static float3 volumeShader(Ray ray) {
 			const float butt = 2 * PI * PCG32::rand();
 			ray = Ray(pointInSpace, float3(r * std::cos(butt), r * std::sin(butt), z));
 			probBRDF = ONE_OVER_FOUR_PI;
-			throughput *= hitInfo.material->Kd;
+			// throughput *= hitInfo.material->Kd; // i think this is technically wrong ...
 		}
 
 		// surface
@@ -1828,14 +1846,14 @@ static float3 volumeShader(Ray ray) {
 			if (hitInfo.material->type == LIGHT) {
 
 				// camera ray intersection or hit specular material
-				if (pathLength == 1 || specular) radiance += throughput * hitInfo.material->emission;
+				if (pathLength == 1 || specular) radiance += throughput * hitInfo.material->emission * dot(hitInfo.G, wo);
 
 				// multiple importance sampling
 				else {
 					const float probDistance = std::exp(-ATTENUATION * hitInfo.t);
 					probBRDF *= probDistance;
 					probLight *= probDistance;
-					radiance += (probBRDF / (probBRDF + probLight)) * throughput * hitInfo.material->emission;
+					radiance += (probBRDF / (probBRDF + probLight)) * throughput * hitInfo.material->emission * dot(hitInfo.G, wo);
 				}
 			}
 
