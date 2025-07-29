@@ -77,8 +77,6 @@ constexpr float ATTENUATION = ABSORPTION + SCATTERING;
 constexpr float ONE_OVER_ATTENUATION = 1.0f / ATTENUATION;
 
 // switches
-constexpr bool SAMPLE_UNIFORM_HEMISPHERE = false;
-constexpr bool SAMPLE_COS_WEIGHTED_HEMISPHERE = true;
 constexpr bool ATMOSPHERIC_SCATTERING = false;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -137,11 +135,11 @@ Image globalImage(globalWidth, globalHeight);
 
 // material type
 enum MaterialType {
+	LIGHT,
 	LAMBERTIAN,
 	METAL,
 	GLASS,
-	LIGHT,
-	ATMOSPHERE
+	MICROFACET
 };
 
 // uber material
@@ -240,12 +238,6 @@ class Material {
 				return x * b1 + y * b2 + z * n;
 			}
 
-			// perfect specular reflection
-			if (type == METAL) {
-				const float3 reflection = -wo + 2 * dot(n, wo) * n;
-				return normalize(reflection);
-			}
-
 			// default
 			return float3(0.0f);
 		}
@@ -254,10 +246,7 @@ class Material {
 		float pdf(const float3& n, const float3& wi) const {
 
 			// perfect diffuse
-			if (type == LAMBERTIAN || type == LIGHT) {
-				if (SAMPLE_UNIFORM_HEMISPHERE) return ONE_OVER_TWO_PI;
-				else if (SAMPLE_COS_WEIGHTED_HEMISPHERE) return dot(n, wi) * ONE_OVER_PI;
-			}
+			if (type == LAMBERTIAN || type == LIGHT) return dot(n, wi) * ONE_OVER_PI;
 
 			// default
 			return 0.0f;
@@ -1587,20 +1576,19 @@ static float3 pathShader(Ray ray) {
 
 		// specular metal
 		else if (hitInfo.material->type == METAL) {
-			ray = Ray(hitPoint, hitInfo.material->sample(wo, hitInfo.G));
+			const float3 reflection = normalize(-wo + 2 * dot(hitInfo.G, wo) * hitInfo.G);
+			ray = Ray(hitPoint, reflection);
 			throughput *= hitInfo.material->Ks;
 			specular = true;
 			continue;
 		}
 
-
-
 		// specular glass
 		else if (hitInfo.material->type == GLASS) {
 
 			// continue path
-			const float Randerson = PCG32::rand();
 			float3 origin, direction;
+			const float Randerson = PCG32::rand();
 
 			// outside air to glass
 			if (!hitInfo.inside) {
@@ -1612,21 +1600,15 @@ static float3 pathShader(Ray ray) {
 				// reflect
 				if (Randerson < R) {
 					origin = hitInfo.P + EPSILON * hitInfo.G;
-					// direction = normalize(-wo + 2 * dotProd * hitInfo.G);
 					direction = normalize(ray.d - 2 * dot(ray.d, hitInfo.G) * hitInfo.G);
-					// throughput /= R;
 					if (dot(hitInfo.G, direction) < 0) direction -= 2 * dot(hitInfo.G, direction) * hitInfo.G;
 				}
 
 				// refract
 				else {
 					origin = hitInfo.P - EPSILON * hitInfo.G;
-					// const float radicand = 1 - AIR_TO_GLASS * AIR_TO_GLASS * (1 - dotProd * dotProd);
 					const float radicand = 1 - AIR_TO_GLASS * AIR_TO_GLASS * (1 - dot(ray.d, hitInfo.G) * dot(ray.d, hitInfo.G));
-					// direction = normalize(AIR_TO_GLASS * (-wo + dotProd * hitInfo.G) - sqrtf(radicand) * hitInfo.G);
-					// direction = normalize(AIR_TO_GLASS * (wo - dotProd * hitInfo.G) - sqrtf(radicand) * hitInfo.G);
 					direction = normalize(AIR_TO_GLASS * (ray.d - dot(ray.d, hitInfo.G) * hitInfo.G) - sqrtf(radicand) * hitInfo.G);
-					// throughput /= (1 - R);
 					if (dot(hitInfo.G, direction) > 0) direction -= 2 * dot(hitInfo.G, direction) * hitInfo.G;
 				}
 			}
@@ -1639,13 +1621,11 @@ static float3 pathShader(Ray ray) {
 				const float R = AIR_GLASS_R + (1 - AIR_GLASS_R) * c * c * c * c * c;
 
 				// check for total internal reflection
-				// const float radicand = 1 - GLASS_TO_AIR * GLASS_TO_AIR * (1 - dotProd * dotProd);
 				const float radicand = 1 - GLASS_TO_AIR * GLASS_TO_AIR * (1 - dot(ray.d, hitInfo.G) * dot(ray.d, hitInfo.G));
 
 				// total internal reflection
 				if (radicand < 0) {
 					origin = hitInfo.P - EPSILON * hitInfo.G;
-					// direction = normalize(-wo + 2 * dotProd * hitInfo.G);
 					direction = normalize(ray.d - 2 * dot(ray.d, hitInfo.G) * hitInfo.G);
 					if (dot(hitInfo.G, direction) > 0) direction -= 2 * dot(hitInfo.G, direction) * hitInfo.G;
 				}
@@ -1653,18 +1633,14 @@ static float3 pathShader(Ray ray) {
 				// reflect
 				else if (Randerson < R) {
 					origin = hitInfo.P - EPSILON * hitInfo.G;
-					// direction = normalize(-wo + 2 * dotProd * hitInfo.G);
 					direction = normalize(ray.d - 2 * dot(ray.d, hitInfo.G) * hitInfo.G);
-					// throughput /= R;
 					if (dot(hitInfo.G, direction) > 0) direction -= 2 * dot(hitInfo.G, direction) * hitInfo.G;
 				}
 
 				// refract
 				else {
 					origin = hitInfo.P + EPSILON * hitInfo.G;
-					// direction = normalize(GLASS_TO_AIR * (-wo + dotProd * hitInfo.G) - sqrtf(radicand) * hitInfo.G);
-					direction = normalize(AIR_TO_GLASS * (ray.d - dot(ray.d, hitInfo.G) * hitInfo.G) - sqrtf(radicand) * hitInfo.G);
-					// throughput /= (1 - R);
+					direction = normalize(GLASS_TO_AIR * (ray.d - dot(ray.d, hitInfo.G) * hitInfo.G) - sqrtf(radicand) * hitInfo.G);
 					if (dot(hitInfo.G, direction) < 0) direction -= 2 * dot(hitInfo.G, direction) * hitInfo.G;
 				}
 			}
@@ -1674,6 +1650,83 @@ static float3 pathShader(Ray ray) {
 			specular = true;
 			continue;
 		}
+
+
+
+
+
+		// microfacet
+		else if (hitInfo.material->type == MICROFACET) {
+
+			// parameters
+			const float roughness = 0.5f;
+			const float alpha = roughness * roughness;
+			const float alpha2 = alpha * alpha;
+			const float k = alpha / 2;
+
+			// random friends
+			const float Randrew = PCG32::rand();
+			const float Ranthony = PCG32::rand();
+
+			// sample microfacet normal
+			const float theta = std::atan((alpha * sqrtf(Randrew)) / sqrtf(1 - Randrew));
+			const float phi = 2 * PI * Ranthony;
+			const float x = std::sin(theta) * std::cos(phi);
+			const float y = std::sin(theta) * std::sin(phi);
+			const float z = std::cos(theta);
+
+			// build orthonormal basis
+			const float sign = copysignf(1, hitInfo.G.z);
+			const float a = -1 / (sign + hitInfo.G.z);
+			const float b = hitInfo.G.x * hitInfo.G.y * a;
+			const float3 b1 = float3(1 + sign * hitInfo.G.x * hitInfo.G.x * a, sign * b, -sign * hitInfo.G.x);
+			const float3 b2 = float3(b, sign + hitInfo.G.y * hitInfo.G.y * a, -hitInfo.G.y);
+
+			// centre about macrosurface normal
+			const float3 m = x * b1 + y * b2 + z * hitInfo.G;
+
+			// evaluate fresnel term
+			const float c = 1 - dot(m, wo);
+			const float F = AIR_GLASS_R + (1 - AIR_GLASS_R) * c * c * c * c * c;
+
+			/*
+			// decide whether to reflect or refract
+			const float3 origin, direction;
+			const float Brandon = PCG32::rand();
+
+			// reflect
+			if (Brandon < F) {}
+
+			// refract
+			else {}
+			*/
+
+			// microfacet distribution function
+			const float nom = dot(hitInfo.G, m);
+			const float base = nom * nom * (alpha2 - 1) + 1;
+			const float D = alpha2 / (PI * base * base);
+
+			// masking shadowing function
+			const float nov = dot(hitInfo.G, wo);
+			const float G1 = nov / (nov * (1 - k) + k);
+			const float G = G1 * G1;
+
+			// macrosurface brdf
+			const float3 rho = hitInfo.material->Kd;
+			const float3 diffuse = rho * ONE_OVER_PI;
+			const float3 brdf = diffuse + F * D * G / (4 * nov * nov);
+
+			// reflected direction
+			const float3 reflection = normalize(-wo + 2 * dot(m, wo) * m);
+			ray = Ray(hitPoint, reflection);
+
+			// update throughput
+			probBRDF = D * nom / (4 * dot(m, wo));
+			throughput *= brdf * dot(hitInfo.G, reflection) / probBRDF;
+			specular = false;
+		}
+
+
 
 
 
@@ -1751,7 +1804,7 @@ static float3 volumeShader(Ray ray) {
 
 	// atmosphere
 	Material black;
-	black.type = ATMOSPHERE;
+	// black.type = ATMOSPHERE;
 	black.Ka = float3(0.0f);
 	black.Kd = float3(0.0f);
 	black.Ks = float3(0.0f);

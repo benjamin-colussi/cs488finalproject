@@ -27,6 +27,8 @@ int main(const int argc, const char* argv[]) {
     TriangleMesh mesh;
     bool objLoadSucceed = mesh.load(argv[1]);
 
+
+
     // object file
     if (objLoadSucceed) {
 
@@ -43,6 +45,20 @@ int main(const int argc, const char* argv[]) {
         Sphere lightBall = Sphere(float3(0.0f, 0.4f, 0.0f), 0.05f, light); // secondary fog testing
         globalScene.addBall(&lightBall);
 
+        // specular metal
+        Material metal;
+        metal.type = METAL;
+        metal.Ks = float3(0.64f);
+        Sphere mirrorBall = Sphere(float3(-0.15f, 0.15f, -0.15f), 0.15f, metal);
+        globalScene.addBall(&mirrorBall);
+
+        // microfacet
+        Material microfacet;
+        microfacet.type = MICROFACET;
+        microfacet.Kd = float3(0.5f);
+        Sphere microfacetBall = Sphere(float3(0.15f, -0.15f, -0.15f), 0.15f, microfacet);
+        globalScene.addBall(&microfacetBall);
+
         // path trace
         globalScene.preCalc();
         globalScene.pathTrace(argc == 3 ? std::stoi(argv[2]) : 2);
@@ -56,6 +72,8 @@ int main(const int argc, const char* argv[]) {
             }
         }
     }
+
+
 
     // no object
     else {

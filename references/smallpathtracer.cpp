@@ -173,6 +173,8 @@ Vec radiance(const Ray& r, int depth, unsigned short* Xi, int E = 1) {
 
 
 
+
+
 	// ideal dielectric refraction
 	Ray reflRay(x, r.d - n * 2 * n.dot(r.d)); // reflected ray
 	bool into = n.dot(nl) > 0; // ray from outside going in?
@@ -203,6 +205,8 @@ Vec radiance(const Ray& r, int depth, unsigned short* Xi, int E = 1) {
 	double TP = Tr / (1 - P); // T / (1 - P)
 
 
+
+	
 
 	// russian roulette
 	return obj.emission + f.mult(depth > 2 ? (erand48(Xi) < P ?
