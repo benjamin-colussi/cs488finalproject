@@ -31,8 +31,6 @@
     (ii) Filter camera rays.
 3. Light sources
     (i) Experiment with colours.
-    (ii) Make sure multiple light sources work with MIS.
-    (iii) Fix up sphere intersections to detect inside or out.
 4. Materials
     (i) I think I may have to change my compuation of the Fresnel term when refracting to be based off the refracted direction and not the reflected direction.
 5. Volumetric scattering
