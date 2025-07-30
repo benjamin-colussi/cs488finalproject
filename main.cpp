@@ -41,32 +41,38 @@ int main(const int argc, const char* argv[]) {
         Material light;
         light.type = LIGHT;
         light.emission = float3(100.0f);
-        Sphere backCorner = Sphere(float3(-0.25f, 0.25f, -0.25f), 0.025f, light);
-        globalScene.addLight(&backCorner);
-        Sphere frontCorner = Sphere(float3(0.25f, -0.25f, -0.25f), 0.025f, light);
-        globalScene.addLight(&frontCorner);
+        // Sphere backTopCorner = Sphere(float3(-0.25f, 0.25f, -0.25f), 0.025f, light);
+        // globalScene.addLight(&backTopCorner);
+        // Sphere backBottomCorner = Sphere(float3(0.25f, -0.25f, -0.25f), 0.025f, light);
+        // globalScene.addLight(&backBottomCorner);
         // Sphere centreCeiling = Sphere(float3(0.0f, 0.4f, 0.0f), 0.05f, light);
-        // globalScene.addBall(&centreCeiling);
+        // globalScene.addLight(&centreCeiling);
+        Sphere leftWall = Sphere(float3(-0.4f, 0.0f, 0.0f), 0.03f, light);
+        globalScene.addLight(&leftWall);
+        Sphere rightWall = Sphere(float3(0.4f, 0.0f, 0.0f), 0.03f, light);
+        globalScene.addLight(&rightWall);
 
         // specular metal
         Material metal;
         metal.type = METAL;
         metal.Ks = float3(0.64f);
-        Sphere metalBall = Sphere(float3(0.15f, 0.15f, -0.15f), 0.2f, metal);
+        Sphere metalBall = Sphere(float3(0.15f, 0.15f, -0.15f), 0.15f, metal);
         globalScene.addBall(&metalBall);
 
         // specular glass
         Material glass;
         glass.type = GLASS;
-        Sphere glassBall = Sphere(float3(-0.15f, -0.15f, 0.15f), 0.2f, glass);
+        Sphere glassBall = Sphere(float3(-0.15f, -0.1f, -0.05f), 0.15f, glass);
         globalScene.addBall(&glassBall);
 
         // microfacet
-        // Material microfacet;
-        // microfacet.type = MICROFACET;
-        // microfacet.Kd = float3(0.5f);
-        // Sphere microfacetBall = Sphere(float3(0.15f, -0.15f, -0.15f), 0.15f, microfacet);
-        // globalScene.addBall(&microfacetBall);
+        Material microfacet;
+        microfacet.type = MICROFACET;
+        // microfacet.Kd = float3(0.5f, 0.5f, 0.5f); // steel
+        // microfacet.Kd = float3(1.022f, 0.782f, 0.344f); // gold
+        microfacet.Kd = float3(0.1f, 0.1f, 0.99f); // blue
+        Sphere microfacetBall = Sphere(float3(0.1f, -0.2f, 0.2f), 0.15f, microfacet);
+        globalScene.addBall(&microfacetBall);
 
         // path trace
         globalScene.preCalc();

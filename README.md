@@ -78,3 +78,5 @@ try TEV for viewing output
 * sampling specular materials - how do the BxDF work with importance sampling?
 
 * sampling solid angle via spherical coordinates - do we have to deal with change of variables - or can we directly change spherical to cartesian / solid angle ???
+
+* does our camera orientation change how we should orient our normals?

@@ -152,7 +152,7 @@ class Material {
 		MaterialType type = LAMBERTIAN;
 		float3 emission = float3(0.0f);
 		float eta = 1.0f;
-		float roughness = 0.5f;
+		float roughness = 0.8f;
 		float alpha = roughness * roughness;
 		float alpha2 = alpha * alpha;
 		float k = alpha / 2.0f;
@@ -183,20 +183,57 @@ class Material {
 			const unsigned char b = texture[pix + 2];
 			return float3(r, g, b) / 255.0f;
 		}
-		
-		
 
-		// bxdf
-		float3 bxdf() const {
+		// brdf value
+		float3 brdf(const float3& wo, const float3& n, const float3& wi) const {
 
 			// perfect diffuse
-			if (type == LAMBERTIAN) return Kd * ONE_OVER_PI;
+			if (type == LIGHT || type == LAMBERTIAN) return Kd * ONE_OVER_PI;
+
+			// microfacet reflection
+			else if (type == MICROFACET) {
+
+				// calculate half direction
+				const float3 m = normalize(wo + wi);
+
+				// microfacet distribution function
+				const float nom = std::max(0.0f, dot(n, m));
+				const float base = nom * nom * (alpha2 - 1) + 1;
+				const float base2 = base * base;
+				float D;
+				if (base2 > 0) D = alpha2 * ONE_OVER_PI / base2;
+				else return float3(0.0f);
+
+				// evaluate fresnel term
+				const float c = 1 - dot(m, wo);
+				const float F = AIR_GLASS_R + (1 - AIR_GLASS_R) * c * c * c * c * c;
+
+				// G1 wo
+				const float noo = std::max(0.0f, dot(n, wo));
+				const float denomo = (noo * (1 - k) + k);
+				float G1o;
+				if (denomo > 0) G1o = noo / denomo;
+				else return float3(0.0f);
+
+				// G1 wi
+				const float noi = std::max(0.0f, dot(n, wi));
+				const float denomi = (noi * (1 - k) + k);
+				float G1i;
+				if (denomi > 0) G1i = noi / denomi;
+				else return float3(0.0f);
+
+				// masking shadowing function
+				const float G = G1o * G1i;
+
+				// macrosurface brdf
+				const float denominator = noo * noi;
+				if (denominator > 0) return Kd * ONE_OVER_PI + D * F * G / (4 * denominator);
+				else return float3(0.0f);
+			}
 
 			// default
-			return float3(0.0f);
+			else return float3(0.0f);
 		}
-
-
 
 		// sample direction
 		float3 sample(const float3& wo, const float3& n) const {
@@ -236,11 +273,8 @@ class Material {
 				return x * b1 + y * b2 + z * n;
 			}
 
-
-
-			/*
-			// microfacet
-			if (type == MICROFACET) {
+			// microfacet reflection
+			else if (type == MICROFACET) {
 
 				// random friends
 				const float Bertrand = PCG32::rand();
@@ -248,55 +282,98 @@ class Material {
 
 				// sample microfacet normal
 				const float theta = std::atan((alpha * sqrtf(Bertrand)) / sqrtf(1 - Bertrand));
-				phi = 2 * PI * Randolf;
+				const float phi = 2 * PI * Randolf;
 				const float x = std::sin(theta) * std::cos(phi);
 				const float y = std::sin(theta) * std::sin(phi);
 				const float z = std::cos(theta);
 
-				// build orthonormal basis
-				sign = copysignf(1, hitInfo.G.z);
-				a = -1 / (sign + hitInfo.G.z);
-				b = hitInfo.G.x * hitInfo.G.y * a;
-				b1 = float3(1 + sign * hitInfo.G.x * hitInfo.G.x * a, sign * b, -sign * hitInfo.G.x);
-				b2 = float3(b, sign + hitInfo.G.y * hitInfo.G.y * a, -hitInfo.G.y);
+				// build orthonormal basis with normal
+				const float sign = copysignf(1, n.z);
+				const float a = -1 / (sign + n.z);
+				const float b = n.x * n.y * a;
+				const float3 b1 = float3(1 + sign * n.x * n.x * a, sign * b, -sign * n.x);
+				const float3 b2 = float3(b, sign + n.y * n.y * a, -n.y);
 
 				// centre about macrosurface normal
-				const float3 m = x * b1 + y * b2 + z * hitInfo.G;
+				const float3 m = x * b1 + y * b2 + z * n;
 
-				// evaluate fresnel term
-				const float c = 1 - dot(m, wo);
-				const float F = AIR_GLASS_R + (1 - AIR_GLASS_R) * c * c * c * c * c;
-
-				// microfacet distribution function
-				const float nom = dot(hitInfo.G, m);
-				const float base = nom * nom * (alpha2 - 1) + 1;
-				const float D = alpha2 / (PI * base * base);
-
-				// masking shadowing function
-				const float nov = dot(hitInfo.G, wo);
-				const float G1 = nov / (nov * (1 - k) + k);
-				const float G = G1 * G1;
-
-				// macrosurface brdf
-				const float3 diffuse = hitInfo.material->Kd * ONE_OVER_PI;
-				const float3 brdf = diffuse + F * D * G / (4 * nov * nov);
+				// return reflected direction
+				return 2 * dot(m, wo) * m - wo;
 			}
-			*/
-
-
-
-		}
-
-
-
-		// pdf at sample
-		float pdf(const float3& n, const float3& wi) const {
-
-			// perfect diffuse
-			if (type == LIGHT || type == LAMBERTIAN) return dot(n, wi) * ONE_OVER_PI;
 
 			// default
-			return 0.0f;
+			else return float3(0.0f);
+		}
+
+		// pdf value at sample
+		float pdf(const float3& wo, const float3& n, const float3& wi) const {
+
+			// perfect diffuse reflection
+			if (type == LIGHT || type == LAMBERTIAN) return std::max(0.0f, dot(n, wi)) * ONE_OVER_PI;
+
+			// microfacet reflection
+			else if (type == MICROFACET) {
+
+				// calculate half direction
+				const float3 m = normalize(wo + wi);
+
+				// microfacet distribution function
+				const float nom = std::max(0.0f, dot(n, m));
+				const float base = nom * nom * (alpha2 - 1) + 1;
+				const float base2 = base * base;
+				float D;
+				if (base2 > 0) D = alpha2 * ONE_OVER_PI / base2;
+				else return 0.0f;
+
+				// return pdf value
+				const float moi = std::max(0.0f, dot(m, wi));
+				if (moi > 0) return D * nom / (4 * dot(m, wi));
+				else return 0.0f;
+			}
+
+			// default
+			else return 0.0f;
+		}
+
+		// throughput weight
+		float3 weight(const float3& wo, const float3& n, const float3& wi) const {
+
+			// perfect diffuse
+			if (type == LIGHT || type == LAMBERTIAN) return Kd;
+
+			// microfacet reflection
+			else if (type == MICROFACET) {
+
+				// G1 wo
+				const float noo = std::max(0.0f, dot(n, wo));
+				const float denomo = (noo * (1 - k) + k);
+				float G1o;
+				if (denomo > 0) G1o = noo / denomo;
+				else return float3(0.0f);
+
+				// G1 wi
+				const float noi = std::max(0.0f, dot(n, wi));
+				const float denomi = (noi * (1 - k) + k);
+				float G1i;
+				if (denomi > 0) G1i = noi / denomi;
+				else return float3(0.0f);
+
+				// masking shadowing function
+				const float G = G1o * G1i;
+
+				// calculate half direction
+				const float3 m = normalize(wo + wi);
+				const float nom = std::max(0.0f, dot(n, m));
+				const float moi = std::max(0.0f, dot(m, wi));
+
+				// macrosurface brdf
+				const float denominator = nom * noi;
+				if (denominator > 0) return Kd * ONE_OVER_PI + G * moi / denominator;
+				else return float3(0.0f);
+			}
+
+			// default
+			else return float3(0.0f);
 		}
 
 };
@@ -1703,129 +1780,10 @@ static float3 pathShader(Ray ray) {
 			continue;
 		}
 
-
-
-
-/*
-		// microfacet
-		else if (hitInfo.material->type == MICROFACET) {
-
-			// parameters
-			const float roughness = 0.5f;
-			const float alpha = roughness * roughness;
-			const float alpha2 = alpha * alpha;
-			const float k = alpha / 2;
-
-			// next event estimation
-			const int l = 0;
-			const Sphere* light = globalScene.balls[l];
-			float3 lightNormal = light->centre - hitPoint;
-			const float oneOverDistanceSquared = 1 / dot(lightNormal, lightNormal);
-			lightNormal *= sqrtf(oneOverDistanceSquared);
-
-			// random friends
-			const float Bertrand = PCG32::rand();
-			const float Randolf = PCG32::rand();
-
-			// calculate random direction towards visible spherical cap
-			const float cosThetaMax = sqrtf(std::max(0.0f, 1 - light->radius * light->radius * oneOverDistanceSquared));
-			probLight = 1 / (2 * PI * (1 - cosThetaMax));
-			const float cosTheta = 1 + (cosThetaMax - 1) * Bertrand;
-			const float sinTheta = sqrtf(1 - cosTheta * cosTheta);
-			float phi = 2 * PI * Randolf;
-
-			// build orthonormal basis and centre about light normal
-			float sign = copysignf(1, lightNormal.z);
-			float a = -1 / (sign + lightNormal.z);
-			float b = lightNormal.x * lightNormal.y * a;
-			float3 b1 = float3(1 + sign * lightNormal.x * lightNormal.x * a, sign * b, -sign * lightNormal.x);
-			float3 b2 = float3(b, sign + lightNormal.y * lightNormal.y * a, -lightNormal.y);
-			const float3 wi = cosTheta * lightNormal + sinTheta * std::cos(phi) * b1 + sinTheta * std::sin(phi) * b2;
-
-			// check visibility
-			HitInfo shadowHitInfo;
-			if (globalScene.intersect(shadowHitInfo, Ray(hitPoint, wi)) && shadowHitInfo.material->type == LIGHT) {
-
-				const float3 m = normalize(wo + wi);
-
-				const float c = 1 - dot(m, wo);
-				const float F = AIR_GLASS_R + (1 - AIR_GLASS_R) * c * c * c * c * c;
-
-				const float nom = dot(hitInfo.G, m);
-				const float base = nom * nom * (alpha2 - 1) + 1;
-				const float D = alpha2 / (PI * base * base);
-
-				const float nov = dot(hitInfo.G, wo);
-				const float G1 = nov / (nov * (1 - k) + k);
-				const float G = G1 * G1;
-
-				const float3 diffuse = hitInfo.material->Kd * ONE_OVER_PI;
-				const float3 brdf = diffuse + F * D * G / (4 * nov * nov);
-
-				probBRDF = D * nom / (4 * dot(m, wi));
-
-				if (probBRDF > 0) {
-					const float weight = 1 / (probLight + probBRDF);
-					radiance += weight * throughput * brdf * light->material.emission * dot(hitInfo.G, wi);
-				}
-			}
-
-			// random friends
-			const float Randrew = PCG32::rand();
-			const float Ranthony = PCG32::rand();
-
-			// sample microfacet normal
-			const float theta = std::atan((alpha * sqrtf(Randrew)) / sqrtf(1 - Randrew));
-			phi = 2 * PI * Ranthony;
-			const float x = std::sin(theta) * std::cos(phi);
-			const float y = std::sin(theta) * std::sin(phi);
-			const float z = std::cos(theta);
-
-			// build orthonormal basis
-			sign = copysignf(1, hitInfo.G.z);
-			a = -1 / (sign + hitInfo.G.z);
-			b = hitInfo.G.x * hitInfo.G.y * a;
-			b1 = float3(1 + sign * hitInfo.G.x * hitInfo.G.x * a, sign * b, -sign * hitInfo.G.x);
-			b2 = float3(b, sign + hitInfo.G.y * hitInfo.G.y * a, -hitInfo.G.y);
-
-			// centre about macrosurface normal
-			const float3 m = x * b1 + y * b2 + z * hitInfo.G;
-
-			// evaluate fresnel term
-			const float c = 1 - dot(m, wo);
-			const float F = AIR_GLASS_R + (1 - AIR_GLASS_R) * c * c * c * c * c;
-
-			// microfacet distribution function
-			const float nom = dot(hitInfo.G, m);
-			const float base = nom * nom * (alpha2 - 1) + 1;
-			const float D = alpha2 / (PI * base * base);
-
-			// masking shadowing function
-			const float nov = dot(hitInfo.G, wo);
-			const float G1 = nov / (nov * (1 - k) + k);
-			const float G = G1 * G1;
-
-			// macrosurface brdf
-			const float3 diffuse = hitInfo.material->Kd * ONE_OVER_PI;
-			const float3 brdf = diffuse + F * D * G / (4 * nov * nov);
-
-			// reflected direction
-			const float3 reflection = normalize(-wo + 2 * dot(m, wo) * m);
-			ray = Ray(hitPoint, reflection);
-
-			// update throughput
-			probBRDF = D * nom / (4 * dot(m, ray.d));
-			throughput *= brdf * dot(hitInfo.G, ray.d) / probBRDF;
-			specular = false;
-			continue;
-		}
-*/
-
-
-
-
 		// choose light source with equal probability
-		const int lightIndex = std::floorf(PCG32::rand() * numberOfLights);
+		int lightIndex = std::floorf(PCG32::rand() * numberOfLights);
+		if (lightIndex < 0) lightIndex = 0;
+		else if (numberOfLights - 1 < lightIndex) lightIndex = numberOfLights - 1;
 		const Sphere* light = globalScene.lights[lightIndex];
 		
 		// direction and distance to centre of light
@@ -1855,21 +1813,33 @@ static float3 pathShader(Ray ray) {
 		// check visibility
 		HitInfo shadowHitInfo;
 		if (globalScene.intersect(shadowHitInfo, Ray(hitPoint, wi)) && shadowHitInfo.material->type == LIGHT) {
-			probBRDF = hitInfo.material->pdf(hitInfo.G, wi);
-			if (probBRDF > 0) {
-				const float weight = 1 / (probNEE + probBRDF);
-				radiance += weight * throughput * hitInfo.material->bxdf() * light->material.emission * dot(hitInfo.G, wi);
-			}
+			probBRDF = hitInfo.material->pdf(wo, hitInfo.G, wi);
+			const float weight = 1 / (probNEE + probBRDF);
+			if (probBRDF > 0) radiance += weight * throughput * hitInfo.material->brdf(wo, hitInfo.G, wi) * light->material.emission * dot(hitInfo.G, wi);
 		}
 
 		// continue path and update throughput
 		ray = Ray(hitPoint, hitInfo.material->sample(wo, hitInfo.G));
-		probBRDF = hitInfo.material->pdf(hitInfo.G, ray.d);
-		if (probBRDF < 0) probBRDF = 0;
-		throughput *= hitInfo.material->Kd;
+		probBRDF = hitInfo.material->pdf(wo, hitInfo.G, ray.d);
+		throughput *= hitInfo.material->weight(wo, hitInfo.G, ray.d);
 		specular = false;
 
 
+
+		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+		if (std::isnan(radiance.x) || std::isnan(radiance.y) || std::isnan(radiance.z)) std::cout << "radiance" << std::endl; /////////////////////////////////////////////////////
+		if (std::isnan(throughput.x) || std::isnan(throughput.y) || std::isnan(throughput.z)) std::cout << "throughput" << std::endl;
+		if (std::isnan(probBRDF)) std::cout << "probBRDF" << std::endl; ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+		if (std::isnan(probLight)) std::cout << "probLight" << std::endl;
+		if (std::isnan(probNEE)) std::cout << "probNEE" << std::endl;
+		if (oneOverDistanceSquared < 0) std::cout << "distance is negative" << std::endl;
+		if (std::isnan(cosThetaMax)) std::cout << "cosThetaMax" << std::endl;
+		if (std::isnan(cosTheta)) std::cout << "cosTheta" << std::endl;
+		if (std::isnan(sinTheta)) std::cout << "sinTheta" << std::endl;
+		if (std::isnan(phi)) std::cout << "phi" << std::endl;
+		if (std::isnan(wi.x) || std::isnan(wi.y) || std::isnan(wi.z)) std::cout << "wi" << std::endl;
+		if (std::isnan(ray.d.x) || std::isnan(ray.d.y) || std::isnan(ray.d.z)) std::cout << "ray.d" << std::endl;
+		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 
@@ -2047,16 +2017,16 @@ static float3 volumeShader(Ray ray) {
 			// check visibility
 			HitInfo shadowHitInfo;
 			if (globalScene.intersect(shadowHitInfo, Ray(hitPoint, wi)) && shadowHitInfo.material->type == LIGHT) {
-				probBRDF = hitInfo.material->pdf(hitInfo.G, wi);
+				probBRDF = hitInfo.material->pdf(wo, hitInfo.G, wi);
 				if (probBRDF > 0) {
 					const float weight = 1 / (probLight + probBRDF);
-					radiance += weight * throughput * hitInfo.material->bxdf() * light->material.emission * dot(hitInfo.G, wi);
+					radiance += weight * throughput * hitInfo.material->brdf(wo, hitInfo.G, wi) * light->material.emission * dot(hitInfo.G, wi);
 				}
 			}
 
 			// continue path and update throughput
 			ray = Ray(hitPoint, hitInfo.material->sample(wo, hitInfo.G));
-			probBRDF = hitInfo.material->pdf(hitInfo.G, ray.d);
+			probBRDF = hitInfo.material->pdf(wo, hitInfo.G, ray.d);
 			if (probBRDF < 0) probBRDF = 0;
 			throughput *= hitInfo.material->Kd;
 			specular = false;
