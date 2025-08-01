@@ -163,6 +163,12 @@ class Material {
 		float alpha = roughness * roughness;
 		float alpha2 = alpha * alpha;
 		float k = alpha / 2.0f;
+		void setRoughness(const float& r) {
+			roughness = r;
+			alpha = roughness * roughness;
+			alpha2 = alpha * alpha;
+			k = alpha / 2.0f;
+		}
 
 		// ctor & dtor
 		Material() = default;
@@ -656,7 +662,7 @@ class TriangleMesh {
 			// convert .mlt data into BSDF definitions
 			if (matid != nullptr) {
 
-				// for all triangles
+				// for all materials
 				for (unsigned int i = 0; i < materials.size(); i++) {
 
 					// default
@@ -669,64 +675,50 @@ class TriangleMesh {
 					if (materials[i].name.compare(0, 5, "glass", 0, 5) == 0) materials[i].type = GLASS;
 
 					// microfacet
-					if (materials[i].name.compare(0, 8, "titanium", 0, 8) == 0) materials[i].type = MICROFACET;
-					if (materials[i].name.compare(0, 6, "chrome", 0, 6) == 0) materials[i].type = MICROFACET;
-					if (materials[i].name.compare(0, 4, "iron", 0, 4) == 0) materials[i].type = MICROFACET;
-					if (materials[i].name.compare(0, 6, "nickel", 0, 6) == 0) materials[i].type = MICROFACET;
-					if (materials[i].name.compare(0, 8, "platinum", 0, 8) == 0) materials[i].type = MICROFACET;
-					if (materials[i].name.compare(0, 6, "copper", 0, 6) == 0) materials[i].type = MICROFACET;
-					if (materials[i].name.compare(0, 9, "palladium", 0, 9) == 0) materials[i].type = MICROFACET;
-					if (materials[i].name.compare(0, 4, "zinc", 0, 4) == 0) materials[i].type = MICROFACET;
-					if (materials[i].name.compare(0, 4, "gold", 0, 4) == 0) materials[i].type = MICROFACET;
-					if (materials[i].name.compare(0, 8, "aluminum", 0, 8) == 0) materials[i].type = MICROFACET;
-					if (materials[i].name.compare(0, 6, "silver", 0, 6) == 0) materials[i].type = MICROFACET;
-
-					/*
-					newmtl titanium
-					Kd 0.542 0.497 0.449
-					Ks 0.8 0.8 0.8
-
-					newmtl chrome
-					Kd 0.549 0.556 0.554
-					Ks 0.8 0.8 0.8
-
-					newmtl iron
-					Kd 0.562 0.565 0.578
-					Ks 0.8 0.8 0.8
-
-					newmtl nickel
-					Kd 0.660 0.609 0.526
-					Ks 0.8 0.8 0.8
-
-					newmtl platinum
-					Kd 0.673 0.637 0.585
-					Ks 0.8 0.8 0.8
-
-					newmtl copper
-					Kd 0.955 0.697 0.652
-					Ks 0.8 0.8 0.8
-
-					newmtl palladium
-					Kd 0.733 0.697 0.652
-					Ks 0.8 0.8 0.8
-
-					newmtl zinc
-					Kd 0.664 0.824 0.850
-					Ks 0.8 0.8 0.8
-
-					newmtl gold
-					Kd 1.022 0.782 0.344
-					Ks 0.8 0.8 0.8
-
-					newmtl aluminum
-					Kd 0.913 0.922 0.924
-					Ks 0.8 0.8 0.8
-
-					newmtl silver
-					Kd 0.972 0.960 0.915
-					Ks 0.8 0.8 0.8
-					*/
-
+					if (materials[i].name.compare(0, 8, "titanium", 0, 8) == 0) {
+						materials[i].type = MICROFACET;
+						materials[i].setRoughness(0.05f);
+					}
+					if (materials[i].name.compare(0, 6, "chrome", 0, 6) == 0) {
+						materials[i].type = MICROFACET;
+						materials[i].setRoughness(0.05f);
+					}
+					if (materials[i].name.compare(0, 4, "iron", 0, 4) == 0) {
+						materials[i].type = MICROFACET;
+						materials[i].setRoughness(0.05f);
+					}
+					if (materials[i].name.compare(0, 6, "nickel", 0, 6) == 0) {
+						materials[i].type = MICROFACET;
+						materials[i].setRoughness(0.15f);
+					}
+					if (materials[i].name.compare(0, 8, "platinum", 0, 8) == 0) {
+						materials[i].type = MICROFACET;
+						materials[i].setRoughness(0.05f);
+					}
+					if (materials[i].name.compare(0, 6, "copper", 0, 6) == 0) {
+						materials[i].type = MICROFACET;
+						materials[i].setRoughness(0.15f);
+					}
+					if (materials[i].name.compare(0, 9, "palladium", 0, 9) == 0) {
+						materials[i].type = MICROFACET;
+						materials[i].setRoughness(0.25f);
+					}
+					if (materials[i].name.compare(0, 4, "zinc", 0, 4) == 0) {
+						materials[i].type = MICROFACET;
+						materials[i].setRoughness(0.15f);
+					}
+					if (materials[i].name.compare(0, 4, "gold", 0, 4) == 0) {
+						materials[i].type = MICROFACET;
+						materials[i].setRoughness(0.05f);
+					}
+					if (materials[i].name.compare(0, 8, "aluminum", 0, 8) == 0) {
+						materials[i].type = MICROFACET;
+						materials[i].setRoughness(0.15f);
+					}
+					if (materials[i].name.compare(0, 6, "silver", 0, 6) == 0) {
+						materials[i].type = MICROFACET;
+						materials[i].setRoughness(0.25f);
+					}
 				}
 			}
 

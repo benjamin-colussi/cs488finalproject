@@ -77,6 +77,7 @@ int main(const int argc, const char* argv[]) {
         Material blackLight;
         blackLight.type = MICROFACET;
         blackLight.Kd = float3(0.1f);
+        blackLight.setRoughness(0.5f);
         Sphere blackMoon = Sphere(float3(1.5f, 3.5f, -10.0f), 1.0f, blackLight);
         globalScene.addBall(&blackMoon);
 
@@ -140,7 +141,7 @@ int main(const int argc, const char* argv[]) {
 
 
 
-        
+
 
         // path trace
         globalScene.preCalc();
