@@ -1,0 +1,65 @@
+newmtl titanium
+Ka 0.8 0.8 0.8
+Kd 0.542 0.497 0.449
+Ks 0.8 0.8 0.8
+Ns 500
+
+newmtl chrome
+Ka 0.8 0.8 0.8
+Kd 0.549 0.556 0.554
+Ks 0.8 0.8 0.8
+Ns 500
+
+newmtl iron
+Ka 0.8 0.8 0.8
+Kd 0.562 0.565 0.578
+Ks 0.8 0.8 0.8
+Ns 500
+
+newmtl nickel
+Ka 0.8 0.8 0.8
+Kd 0.660 0.609 0.526
+Ks 0.8 0.8 0.8
+Ns 500
+
+newmtl platinum
+Ka 0.8 0.8 0.8
+Kd 0.673 0.637 0.585
+Ks 0.8 0.8 0.8
+Ns 500
+
+newmtl copper
+Ka 0.8 0.8 0.8
+Kd 0.955 0.697 0.652
+Ks 0.8 0.8 0.8
+Ns 500
+
+newmtl palladium
+Ka 0.8 0.8 0.8
+Kd 0.733 0.697 0.652
+Ks 0.8 0.8 0.8
+Ns 500
+
+newmtl zinc
+Ka 0.8 0.8 0.8
+Kd 0.664 0.824 0.850
+Ks 0.8 0.8 0.8
+Ns 500
+
+newmtl gold
+Ka 0.8 0.8 0.8
+Kd 1.022 0.782 0.344
+Ks 0.8 0.8 0.8
+Ns 500
+
+newmtl aluminum
+Ka 0.8 0.8 0.8
+Kd 0.913 0.922 0.924
+Ks 0.8 0.8 0.8
+Ns 500
+
+newmtl silver
+Ka 0.8 0.8 0.8
+Kd 0.972 0.960 0.915
+Ks 0.8 0.8 0.8
+Ns 500

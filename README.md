@@ -9,15 +9,14 @@
 4. Materials
     (i) specular reflection
     (ii) specular refraction w/ Fresnel
-5. Volumetric scattering - Beer
+    (iii) microfacet model
+5. Volumetric scattering - Beer - multiple scattering, free flight sampling, NEE, MIS
 
 
 
 ## Remaining objectives:
-4. Materials
-    (iii) microfacet model for rough metal and glossy surfaces
 6. Atmospheric scattering - Rayleigh, Mie
-7. Build scene
+7. Build the scene
 8. WRITE THE REPORT !!!
 
 
@@ -31,8 +30,6 @@
     (ii) Filter camera rays.
 3. Light sources
     (i) Experiment with colours.
-4. Materials
-    (i) I think I may have to change my compuation of the Fresnel term when refracting to be based off the refracted direction and not the reflected direction.
 5. Volumetric scattering
     (i) Maybe try that other sampling method to reduce variance.
 6. Atmospheric scattering
@@ -80,3 +77,5 @@ try TEV for viewing output
 * sampling solid angle via spherical coordinates - do we have to deal with change of variables - or can we directly change spherical to cartesian / solid angle ???
 
 * does our camera orientation change how we should orient our normals?
+
+* should i be deciding randomly whether to reflect or diffusely reflect based on fresnel coeff?

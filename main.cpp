@@ -37,42 +37,110 @@ int main(const int argc, const char* argv[]) {
         filename = s.substr(0, s.length() - 4) + ".ppm";
         globalScene.addObject(&mesh);
 
-        // set up lighting
+
+
+
+
+        // red
+        Material redLight;
+        redLight.type = LIGHT;
+        redLight.emission = float3(53.36f, 6.56f, 0.32f);
+        redLight.Kd = float3(0.53360f, 0.06560f, 0.00320f);
+        Sphere redMoon = Sphere(float3(-5.5f, 5.0f, -13.0f), 1.0f, redLight);
+        globalScene.addLight(&redMoon);
+
+        // green
+        Material greenLight;
+        greenLight.type = LIGHT;
+        greenLight.emission = float3(11.6f, 30.72f, 6.24f);
+        greenLight.Kd = float3(0.11600f, 0.30720f, 0.06240f);
+        Sphere greenMoon = Sphere(float3(-5.5f, 5.0f, -16.0f), 1.0f, greenLight);
+        globalScene.addLight(&greenMoon);
+
+        // white
+        Material whiteLight;
+        whiteLight.type = LIGHT;
+        whiteLight.emission = float3(78.4f, 68.08f, 42.96f);
+        whiteLight.Kd = float3(0.78400f, 0.68080f, 0.42960f);
+        Sphere whiteMoon = Sphere(float3(4.0f, 4.5f, -18.0f), 1.0f, whiteLight);
+        globalScene.addLight(&whiteMoon);
+
+        // blue
+        Material blueLight;
+        blueLight.type = LIGHT;
+        blueLight.emission = float3(11.6f, 6.24f, 30.72f);
+        blueLight.Kd = float3(0.11600f, 0.06240f, 0.30720f);
+        Sphere blueMoon = Sphere(float3(6.0f, 4.0f, -12.0f), 1.0f, blueLight);
+        globalScene.addLight(&blueMoon);
+
+        // black
+        Material blackLight;
+        blackLight.type = MICROFACET;
+        blackLight.Kd = float3(0.1f);
+        Sphere blackMoon = Sphere(float3(1.5f, 3.5f, -10.0f), 1.0f, blackLight);
+        globalScene.addBall(&blackMoon);
+
+        // glass
+        Material glass;
+        glass.type = GLASS;
+        Sphere glassOrb = Sphere(float3(-0.5f, 1.0f, -14.5f), 4.0f, glass);
+        globalScene.addBall(&glassOrb);
+
+
+
+
+
+        /*
+
         Material light;
         light.type = LIGHT;
-        light.emission = float3(100.0f);
-        // Sphere backTopCorner = Sphere(float3(-0.25f, 0.25f, -0.25f), 0.025f, light);
-        // globalScene.addLight(&backTopCorner);
-        // Sphere backBottomCorner = Sphere(float3(0.25f, -0.25f, -0.25f), 0.025f, light);
-        // globalScene.addLight(&backBottomCorner);
-        // Sphere centreCeiling = Sphere(float3(0.0f, 0.4f, 0.0f), 0.05f, light);
-        // globalScene.addLight(&centreCeiling);
-        Sphere leftWall = Sphere(float3(-0.4f, 0.0f, 0.0f), 0.03f, light);
+        light.emission = float3(100.0);
+        Sphere bigLight = Sphere(float3(0.0f, 2.5f, -5.0f), 0.25f, light);
+        globalScene.addLight(&bigLight);
+
+        Sphere backTopCorner = Sphere(float3(-0.25f, 0.25f, -0.25f), 0.025f, light);
+        globalScene.addLight(&backTopCorner);
+        Sphere backBottomCorner = Sphere(float3(0.25f, -0.25f, -0.25f), 0.025f, light);
+        globalScene.addLight(&backBottomCorner);
+        Sphere centreCeiling = Sphere(float3(0.0f, 0.4f, 0.0f), 0.05f, light);
+        globalScene.addLight(&centreCeiling);
+        Sphere centreFloor = Sphere(float3(0.0f, -0.4f, 0.0f), 0.025f, light);
+        globalScene.addLight(&centreFloor);
+        Sphere centreBack = Sphere(float3(0.0f, 0.0f, -0.4f), 0.025f, light);
+        globalScene.addLight(&centreBack);
+        Sphere leftWall = Sphere(float3(-0.4f, 0.0f, 0.0f), 0.025f, light);
         globalScene.addLight(&leftWall);
-        Sphere rightWall = Sphere(float3(0.4f, 0.0f, 0.0f), 0.03f, light);
+        Sphere rightWall = Sphere(float3(0.4f, 0.0f, 0.0f), 0.025f, light);
         globalScene.addLight(&rightWall);
 
         // specular metal
         Material metal;
         metal.type = METAL;
         metal.Ks = float3(0.64f);
-        Sphere metalBall = Sphere(float3(0.15f, 0.15f, -0.15f), 0.15f, metal);
+        Sphere metalBall = Sphere(float3(0.15f, 0.175f, -0.1f), 0.15f, metal);
         globalScene.addBall(&metalBall);
 
         // specular glass
         Material glass;
         glass.type = GLASS;
-        Sphere glassBall = Sphere(float3(-0.15f, -0.1f, -0.05f), 0.15f, glass);
+        Sphere glassBall = Sphere(float3(-0.15f, 0.0f, 0.1f), 0.15f, glass);
         globalScene.addBall(&glassBall);
 
         // microfacet
         Material microfacet;
         microfacet.type = MICROFACET;
-        // microfacet.Kd = float3(0.5f, 0.5f, 0.5f); // steel
-        // microfacet.Kd = float3(1.022f, 0.782f, 0.344f); // gold
+        microfacet.Kd = float3(0.64f); // steel
+        microfacet.Kd = float3(0.75f, 0.5f, 0.5f); // copper
+        microfacet.Kd = float3(1.022f, 0.782f, 0.344f); // gold
         microfacet.Kd = float3(0.1f, 0.1f, 0.99f); // blue
-        Sphere microfacetBall = Sphere(float3(0.1f, -0.2f, 0.2f), 0.15f, microfacet);
+        Sphere microfacetBall = Sphere(float3(0.15f, -0.175f, 0.0f), 0.15f, microfacet);
         globalScene.addBall(&microfacetBall);
+
+        */
+
+
+
+        
 
         // path trace
         globalScene.preCalc();

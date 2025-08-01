@@ -36,8 +36,8 @@ constexpr float GLASS_TO_AIR = REFR_IND_GLASS / REFR_IND_AIR;
 constexpr float AIR_GLASS_R = (REFR_IND_AIR - REFR_IND_GLASS) * (REFR_IND_AIR - REFR_IND_GLASS) / ((REFR_IND_AIR + REFR_IND_GLASS) * (REFR_IND_AIR + REFR_IND_GLASS));
 
 // window size and resolution
-constexpr int globalWidth = 512;
-constexpr int globalHeight = 384;
+constexpr int globalWidth = 640; // 512
+constexpr int globalHeight = 480; // 384
 
 // fixed camera parameters
 constexpr float globalAspectRatio = static_cast<float>(globalWidth) / static_cast<float>(globalHeight);
@@ -151,17 +151,18 @@ class Material {
 		std::string name;
 		MaterialType type = LAMBERTIAN;
 		float3 emission = float3(0.0f);
-		float eta = 1.0f;
-		float roughness = 0.8f;
-		float alpha = roughness * roughness;
-		float alpha2 = alpha * alpha;
-		float k = alpha / 2.0f;
 
 		// colour
 		float3 Ka = float3(0.0f); // ambient colour
 		float3 Kd = float3(0.9f); // diffuse colour
 		float3 Ks = float3(0.0f); // specular colour
 		float Ns = 0.0f; // specular exponent
+
+		// microfacet
+		float roughness = 0.25f;
+		float alpha = roughness * roughness;
+		float alpha2 = alpha * alpha;
+		float k = alpha / 2.0f;
 
 		// ctor & dtor
 		Material() = default;
@@ -206,7 +207,7 @@ class Material {
 
 				// evaluate fresnel term
 				const float c = 1 - dot(m, wo);
-				const float F = AIR_GLASS_R + (1 - AIR_GLASS_R) * c * c * c * c * c;
+				float3 F = Kd + (1 - Kd) * c * c * c * c * c;
 
 				// G1 wo
 				const float noo = std::max(0.0f, dot(n, wo));
@@ -227,7 +228,7 @@ class Material {
 
 				// macrosurface brdf
 				const float denominator = noo * noi;
-				if (denominator > 0) return Kd * ONE_OVER_PI + D * F * G / (4 * denominator);
+				if (denominator > 0) return D * F * G / (4 * denominator);
 				else return float3(0.0f);
 			}
 
@@ -344,6 +345,20 @@ class Material {
 			// microfacet reflection
 			else if (type == MICROFACET) {
 
+				// calculate half direction
+				const float3 m = normalize(wo + wi);
+				const float nom = std::max(0.0f, dot(n, m));
+				const float moi = std::max(0.0f, dot(m, wi));
+
+				// evaluate fresnel term
+				// const float c = 1 - dot(m, wo);
+				// float3 F;
+				// if (metallic) F = Kd + (1 - Kd) * c * c * c * c * c;
+				// else {
+				// 	const float F0 = 0.16f * (reflectance * reflectance);
+				// 	F = float3(F0 + (1 - F0) * c * c * c * c * c);
+				// }
+
 				// G1 wo
 				const float noo = std::max(0.0f, dot(n, wo));
 				const float denomo = (noo * (1 - k) + k);
@@ -361,14 +376,11 @@ class Material {
 				// masking shadowing function
 				const float G = G1o * G1i;
 
-				// calculate half direction
-				const float3 m = normalize(wo + wi);
-				const float nom = std::max(0.0f, dot(n, m));
-				const float moi = std::max(0.0f, dot(m, wi));
-
 				// macrosurface brdf
 				const float denominator = nom * noi;
 				if (denominator > 0) return Kd * ONE_OVER_PI + G * moi / denominator;
+				// if (denominator > 0) return float3(1.0f) * G * moi / denominator;
+				// if (denominator > 0) return (1 - F) * Kd * ONE_OVER_PI + G * moi / denominator;
 				else return float3(0.0f);
 			}
 
@@ -616,6 +628,10 @@ class TriangleMesh {
 			if (nVertices == 0) return false;
 			this->triangles.resize(nIndices / 3);
 
+
+
+			/*
+
 			if (matid != nullptr) {
 				for (unsigned int i = 0; i < materials.size(); i++) {
 					// convert .mlt data into BSDF definitions
@@ -629,10 +645,95 @@ class TriangleMesh {
 						materials[i].eta = 1.5f;
 					}
 				}
-			} else {
+			}
+			else {
 				// use default Lambertian
 				this->materials.resize(1);
 			}
+
+			*/
+
+			// convert .mlt data into BSDF definitions
+			if (matid != nullptr) {
+
+				// for all triangles
+				for (unsigned int i = 0; i < materials.size(); i++) {
+
+					// default
+					materials[i].type = LAMBERTIAN;
+
+					// metal
+					if (materials[i].Ns == 100.0f) materials[i].type = METAL;
+
+					// glass
+					if (materials[i].name.compare(0, 5, "glass", 0, 5) == 0) materials[i].type = GLASS;
+
+					// microfacet
+					if (materials[i].name.compare(0, 8, "titanium", 0, 8) == 0) materials[i].type = MICROFACET;
+					if (materials[i].name.compare(0, 6, "chrome", 0, 6) == 0) materials[i].type = MICROFACET;
+					if (materials[i].name.compare(0, 4, "iron", 0, 4) == 0) materials[i].type = MICROFACET;
+					if (materials[i].name.compare(0, 6, "nickel", 0, 6) == 0) materials[i].type = MICROFACET;
+					if (materials[i].name.compare(0, 8, "platinum", 0, 8) == 0) materials[i].type = MICROFACET;
+					if (materials[i].name.compare(0, 6, "copper", 0, 6) == 0) materials[i].type = MICROFACET;
+					if (materials[i].name.compare(0, 9, "palladium", 0, 9) == 0) materials[i].type = MICROFACET;
+					if (materials[i].name.compare(0, 4, "zinc", 0, 4) == 0) materials[i].type = MICROFACET;
+					if (materials[i].name.compare(0, 4, "gold", 0, 4) == 0) materials[i].type = MICROFACET;
+					if (materials[i].name.compare(0, 8, "aluminum", 0, 8) == 0) materials[i].type = MICROFACET;
+					if (materials[i].name.compare(0, 6, "silver", 0, 6) == 0) materials[i].type = MICROFACET;
+
+					/*
+					newmtl titanium
+					Kd 0.542 0.497 0.449
+					Ks 0.8 0.8 0.8
+
+					newmtl chrome
+					Kd 0.549 0.556 0.554
+					Ks 0.8 0.8 0.8
+
+					newmtl iron
+					Kd 0.562 0.565 0.578
+					Ks 0.8 0.8 0.8
+
+					newmtl nickel
+					Kd 0.660 0.609 0.526
+					Ks 0.8 0.8 0.8
+
+					newmtl platinum
+					Kd 0.673 0.637 0.585
+					Ks 0.8 0.8 0.8
+
+					newmtl copper
+					Kd 0.955 0.697 0.652
+					Ks 0.8 0.8 0.8
+
+					newmtl palladium
+					Kd 0.733 0.697 0.652
+					Ks 0.8 0.8 0.8
+
+					newmtl zinc
+					Kd 0.664 0.824 0.850
+					Ks 0.8 0.8 0.8
+
+					newmtl gold
+					Kd 1.022 0.782 0.344
+					Ks 0.8 0.8 0.8
+
+					newmtl aluminum
+					Kd 0.913 0.922 0.924
+					Ks 0.8 0.8 0.8
+
+					newmtl silver
+					Kd 0.972 0.960 0.915
+					Ks 0.8 0.8 0.8
+					*/
+
+				}
+			}
+
+			// default
+			else this->materials.resize(1);
+
+
 
 			for (unsigned int i = 0; i < this->triangles.size(); i++) {
 				const int v0 = indices[i * 3 + 0];
@@ -1697,7 +1798,8 @@ static float3 pathShader(Ray ray) {
 		if (hitInfo.material->type == LIGHT) {
 
 			// camera ray intersection or hit specular material
-			if (pathLength == 1 || specular) radiance += throughput * hitInfo.material->emission * dot(hitInfo.G, wo);
+			// if (pathLength == 1 || specular) radiance += throughput * hitInfo.material->emission * dot(hitInfo.G, wo);
+			if (pathLength == 1 || specular) radiance += throughput * hitInfo.material->Kd * dot(hitInfo.G, wo);
 
 			// multiple importance sampling
 			else radiance += (probBRDF / (probBRDF + probNEE)) * throughput * hitInfo.material->emission * dot(hitInfo.G, wo);
@@ -1821,7 +1923,8 @@ static float3 pathShader(Ray ray) {
 		// continue path and update throughput
 		ray = Ray(hitPoint, hitInfo.material->sample(wo, hitInfo.G));
 		probBRDF = hitInfo.material->pdf(wo, hitInfo.G, ray.d);
-		throughput *= hitInfo.material->weight(wo, hitInfo.G, ray.d);
+		// throughput *= hitInfo.material->weight(wo, hitInfo.G, ray.d);
+		if (probBRDF > 0) throughput *= hitInfo.material->brdf(wo, hitInfo.G, ray.d) * dot(hitInfo.G, ray.d) / probBRDF;
 		specular = false;
 
 
