@@ -1,7 +1,5 @@
 # READ ME BRO
 
-
-
 ## Completed objectives:
 1. Refactor? I hardly know her ...
 2. Path tracing w/ RR, NEE & MIS :^D
@@ -11,46 +9,31 @@
     (ii) specular refraction w/ Fresnel
     (iii) microfacet model
 5. Volumetric scattering - Beer - multiple scattering, free flight sampling, NEE, MIS
-
-
+7. Built the scene
 
 ## Remaining objectives:
 6. Atmospheric scattering - Rayleigh, Mie
-7. Build the scene
 8. WRITE THE REPORT !!!
-
-
+9. Model some test scenes and images.
 
 ## Tidying up:
 1. Refactor
     (i) Make sure I understand OpenMP and how I'm using it.
-    (ii) Clean up command line interface.
-2. Path tracing
-    (i) Make light sampling more robust.
-    (ii) Filter camera rays.
-3. Light sources
-    (i) Experiment with colours.
-5. Volumetric scattering
-    (i) Maybe try that other sampling method to reduce variance.
+    (ii) Clean up command line interface and main function.
+    (iii) Add gamma correction and clamping to Image class.
+    (iv) Tidy up code.
+2. Path Tracing
+    (i) Filter camera rays using tent to combat aliasing.
 6. Atmospheric scattering
-    (i) Try to implement Rayleigh or Mie scattering to get some realistic atmospheric effects.
-7. Model the scene
-    (i) Try to build one simple hexagon in Blender.
+    (i) try to play around with rayleigh scattering by changing rgb values of scattering coefficients
+    (ii) implement a better phase function with more forward scattering
+    (iii) implement sampling from the phase function
 
 
-
-## Next:
-* going to have to fix my light sampling using method of projection
-  because if we sample a direction towards light, and we dont have occlusion, then we should definitely have a light hit - BIAS
-* atmospheric scattering - implement rayleigh later
-* filter camera rays - i think im getting some aliasing for some reason ...
-* material models
-* SAH-BVH
 
 
 
 ## Tidying up:
-fix geometric normal calculations in triangle intersect
 fix all boolean checks to not use "== true" to avoid that one bug again
 Set up BRDF class
 Set up the material class w/ proper BSDF, PDF, sampling
@@ -65,17 +48,3 @@ try TEV for viewing output
 * fix SAH-BVH
 * fix image class with my own gamma correction and tone mapping
 * make sure my code doesnt use the small path tracer code ...
-
-
-
-## Questions:
-* what are the units of the BxDF/phase functions?
-* MIS w/ fog - how do the coefficients affect output? should they be less than 1
-* MIS w/ fog - just confirm my logic is correct
-* sampling specular materials - how do the BxDF work with importance sampling?
-
-* sampling solid angle via spherical coordinates - do we have to deal with change of variables - or can we directly change spherical to cartesian / solid angle ???
-
-* does our camera orientation change how we should orient our normals?
-
-* should i be deciding randomly whether to reflect or diffusely reflect based on fresnel coeff?

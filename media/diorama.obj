@@ -1,0 +1,35 @@
+mtllib diorama.mtl
+
+v 0.55 -0.4 0.4 # front bottom right
+v -0.55 -0.4 0.4 # front bottom left
+v 0.55 -0.4 -0.4 # back bottom right
+v -0.55 -0.4 -0.4 # back bottom left
+v 0.55 0.4 0.4 # front top right
+v 0.55 0.4 -0.4 # back top right
+v -0.55 0.4 0.4 # front top left
+v -0.55 0.4 -0.4 # back top left
+
+# top
+usemtl ceiling
+f 7/1 8/1 6/1
+f 7/1 6/1 5/1
+
+# bottom
+usemtl floor
+f 3/1 4/1 2/1
+f 3/1 2/1 1/1
+
+# left
+usemtl green
+f 7/1 2/1 4/1
+f 7/1 4/1 8/1
+
+# back
+usemtl blue
+f 6/1 8/1 4/1
+f 6/1 4/1 3/1
+
+# right
+usemtl red
+f 6/1 3/1 1/1
+f 6/1 1/1 5/1
