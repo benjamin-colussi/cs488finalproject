@@ -102,6 +102,7 @@ describe my software engineering choices i guess ...
 mention openmp
 mention the code in main and how to build differently with lights
 describe my iterative approach to solving the rendering equation
+only using geometric normals - could easily make it work for shading normals
 
 
 
