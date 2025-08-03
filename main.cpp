@@ -2,7 +2,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////                                                                              ////////////////////////////////
 /////////   CS 488 - SPRING 2025                                                       ////////////////////////////////
-/////////   FINAL PROJECT - GLIMMERVOID                                                ////////////////////////////////
+/////////   FINAL PROJECT - MIRRODIN                                                   ////////////////////////////////
 /////////   by Benjamin Colussi                                                        ////////////////////////////////
 /////////                                                                              ////////////////////////////////
 /////////   compile:  g++-15 -std=c++14 -Wall -O3 -fopenmp main.cpp -o finalproject    ////////////////////////////////
@@ -37,19 +37,22 @@ int main(const int argc, const char* argv[]) {
         filename = s.substr(0, s.length() - 4) + ".ppm";
         globalScene.addObject(&mesh);
 
-        // light
+        // light material
         Material light;
         light.type = LIGHT;
         light.emission = float3(100.0);
 
-        // glass
+        // glass material
         Material glass; glass.type = GLASS;
 
-        // metal
+        // metal material
         Material metal; metal.type = METAL; metal.Ks = float3(0.64f);
 
-        // microfacet
-        const float3 microfacetColour(0.64f);
+        // microfacet material
+        const float3 microfacetColour(0.64f); // grey
+        // const float3 microfacetColour(0.955f, 0.697f, 0.652f); // copper
+        // const float3 microfacetColour(0.972f, 0.960f, 0.915f); // silver
+        // const float3 microfacetColour(1.022f, 0.782f, 0.344f); // gold
         Material microfacet; microfacet.type = MICROFACET; microfacet.Kd = microfacetColour; microfacet.setRoughness(0.5f);
         Material microfacet1; microfacet1.type = MICROFACET; microfacet1.Kd = microfacetColour; microfacet1.setRoughness(0.0f);
         Material microfacet2; microfacet2.type = MICROFACET; microfacet2.Kd = microfacetColour; microfacet2.setRoughness(0.05f);
@@ -64,14 +67,15 @@ int main(const int argc, const char* argv[]) {
         Material microfacet11; microfacet11.type = MICROFACET; microfacet11.Kd = microfacetColour; microfacet11.setRoughness(0.95f);
         Material microfacet12; microfacet12.type = MICROFACET; microfacet12.Kd = microfacetColour; microfacet12.setRoughness(1.0f);
 
-        /*
+        
 
         // red
         Material redLight;
         redLight.type = LIGHT;
         redLight.emission = float3(533.6f, 65.6f, 3.2f) / 2;
         redLight.Kd = float3(0.53360f, 0.06560f, 0.00320f);
-        Sphere redMoon = Sphere(float3(-5.5f, 5.0f, -13.0f), 1.0f, redLight);
+        // Sphere redMoon = Sphere(float3(-5.5f, 5.0f, -13.0f), 1.25f, redLight);
+        Sphere redMoon = Sphere(float3(-5.5f, 4.0f, -11.0f), 1.5f, redLight);
         globalScene.addLight(&redMoon);
 
         // green
@@ -79,7 +83,8 @@ int main(const int argc, const char* argv[]) {
         greenLight.type = LIGHT;
         greenLight.emission = float3(116.0f, 307.2f, 62.4f) / 2;
         greenLight.Kd = float3(0.11600f, 0.30720f, 0.06240f);
-        Sphere greenMoon = Sphere(float3(-5.5f, 5.0f, -16.0f), 1.0f, greenLight);
+        // Sphere greenMoon = Sphere(float3(-5.5f, 5.0f, -16.0f), 1.25f, greenLight);
+        Sphere greenMoon = Sphere(float3(-5.0f, 5.0f, -16.0f), 1.5f, greenLight);
         globalScene.addLight(&greenMoon);
 
         // white
@@ -87,7 +92,8 @@ int main(const int argc, const char* argv[]) {
         whiteLight.type = LIGHT;
         whiteLight.emission = float3(884.0f, 780.8f, 29.6f) / 2;
         whiteLight.Kd = float3(0.88400f, 0.78080f, 0.02960f);
-        Sphere whiteMoon = Sphere(float3(4.0f, 4.5f, -18.0f), 1.0f, whiteLight);
+        // Sphere whiteMoon = Sphere(float3(4.0f, 4.5f, -18.0f), 1.25f, whiteLight);
+        Sphere whiteMoon = Sphere(float3(4.0f, 4.5f, -18.0f), 1.5f, whiteLight);
         globalScene.addLight(&whiteMoon);
 
         // blue
@@ -95,7 +101,8 @@ int main(const int argc, const char* argv[]) {
         blueLight.type = LIGHT;
         blueLight.emission = float3(116.0f, 62.4f, 307.2f) / 2;
         blueLight.Kd = float3(0.11600f, 0.06240f, 0.30720f);
-        Sphere blueMoon = Sphere(float3(6.0f, 4.0f, -12.0f), 1.0f, blueLight);
+        // Sphere blueMoon = Sphere(float3(6.0f, 4.0f, -12.0f), 1.25f, blueLight);
+        Sphere blueMoon = Sphere(float3(7.0f, 4.0f, -14.0f), 1.5f, blueLight);
         globalScene.addLight(&blueMoon);
 
         // black
@@ -103,25 +110,28 @@ int main(const int argc, const char* argv[]) {
         blackLight.type = MICROFACET;
         blackLight.Kd = float3(0.1f);
         blackLight.setRoughness(0.5f);
-        Sphere blackMoon = Sphere(float3(1.5f, 3.5f, -10.0f), 1.0f, blackLight);
+        // Sphere blackMoon = Sphere(float3(1.5f, 3.5f, -10.0f), 1.25f, blackLight);
+        Sphere blackMoon = Sphere(float3(1.0f, 3.5f, -10.0f), 1.5f, blackLight);
         globalScene.addBall(&blackMoon);
 
         // orb
         Sphere orb = Sphere(float3(-0.5f, 1.0f, -14.5f), 4.0f, glass);
         globalScene.addBall(&orb);
 
-        */
 
-        
+
+        /*
         
         // cornell box
-        Sphere backTopCorner = Sphere(float3(-0.25f, 0.25f, -0.25f), 0.025f, light); globalScene.addLight(&backTopCorner);
+        // Sphere backTopCorner = Sphere(float3(-0.25f, 0.25f, -0.25f), 0.025f, light); globalScene.addLight(&backTopCorner);
         // Sphere centreCeiling = Sphere(float3(0.0f, 0.4f, 0.0f), 0.05f, light); globalScene.addLight(&centreCeiling); // for fog
 
         // diorama lights
+        // Sphere dioramaCeiling = Sphere(float3(0.0f, 0.4f, 0.0f), 0.05f, light); globalScene.addLight(&dioramaCeiling);
+        // Sphere dioramaFloor = Sphere(float3(0.0f, -0.4f, 0.0f), 0.05f, light); globalScene.addLight(&dioramaFloor);
         // Sphere dioramaBackWall = Sphere(float3(0.0f, 0.0f, -0.4f), 0.05f, light); globalScene.addLight(&dioramaBackWall);
-        // Sphere dioramaLeftWall = Sphere(float3(-0.55f, 0.0f, 0.1f), 0.05f, light); globalScene.addLight(&dioramaLeftWall);
-        // Sphere dioramaRightWall = Sphere(float3(0.55f, 0.0f, 0.1f), 0.05f, light); globalScene.addLight(&dioramaRightWall);
+        // Sphere dioramaLeftWall = Sphere(float3(-0.55f, 0.0f, 0.0f), 0.05f, light); globalScene.addLight(&dioramaLeftWall);
+        // Sphere dioramaRightWall = Sphere(float3(0.55f, 0.0f, 0.0f), 0.05f, light); globalScene.addLight(&dioramaRightWall);
         // Sphere dioramaLeftBehind = Sphere(float3(-0.5f, 0.0f, 1.0f), 0.075f, light); globalScene.addLight(&dioramaLeftBehind);
         // Sphere dioramaRightBehind = Sphere(float3(0.5f, 0.0f, 1.0f), 0.075f, light); globalScene.addLight(&dioramaRightBehind);
 
@@ -171,7 +181,7 @@ int main(const int argc, const char* argv[]) {
         // Sphere microfacetBall11 = Sphere(float3(0.2f, -0.3f, -0.1), 0.09f, microfacet11); globalScene.addBall(&microfacetBall11);
         // Sphere microfacetBall12 = Sphere(float3(0.4f, -0.3f, -0.1), 0.09f, microfacet12); globalScene.addBall(&microfacetBall12);
 
-        
+        */
 
         // path trace
         globalScene.preCalc();
