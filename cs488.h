@@ -83,10 +83,12 @@ constexpr float ONE_OVER_ATTENUATION = 1.0f / ATTENUATION;
 
 // switches
 constexpr bool ATMOSPHERIC_SCATTERING = true;
+
+// choose a scene to render
 constexpr bool RENDER_CORNELL_BOX = false;
 constexpr bool RENDER_GLASS_DIORAMA = false;
 constexpr bool RENDER_MICROFACET_DIORAMA = false;
-constexpr bool RENDER_FINAL_SCENE = true;
+constexpr bool RENDER_FINAL_SCENE = false;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

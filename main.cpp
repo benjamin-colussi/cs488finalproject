@@ -35,7 +35,8 @@ int main(const int argc, const char* argv[]) {
         filename = s.substr(0, s.length() - 4) + ".ppm";
         globalScene.addObject(&mesh);
 
-        // render cornell box
+        // render cornell box - to be used with:
+        // cornellbox.obj cornellbox-metal.obj cornellbox-glass.obj
         if (RENDER_CORNELL_BOX) {
 
             // lighting
@@ -58,7 +59,7 @@ int main(const int argc, const char* argv[]) {
             }
         }
 
-        // render glass diorama
+        // render glass diorama - to be used with: diorama.obj
         else if (RENDER_GLASS_DIORAMA) {
 
             // materials
@@ -117,7 +118,7 @@ int main(const int argc, const char* argv[]) {
             }
         }
 
-        // render microfacet diorama
+        // render microfacet diorama - to be used with: diorama.obj
         else if (RENDER_MICROFACET_DIORAMA) {
 
             // lighting
@@ -178,7 +179,7 @@ int main(const int argc, const char* argv[]) {
             }
         }
 
-        // render final scene
+        // render final scene - - to be used with: mirrodin.obj
         else if (RENDER_FINAL_SCENE) {
 
             // red
@@ -233,78 +234,12 @@ int main(const int argc, const char* argv[]) {
                 }
             }
         }
+    
+        // no switches are turned on
+        else printf("Please choose which scene to render by setting a switch in cs488.h == true.\n");
     }
-
-
 
     // no object
-    else {
-
-        // message
-        printf("Failed to load .obj file. Making balls instead.\n");
-
-        // light
-        Material light;
-        light.type = LIGHT;
-        light.emission = float3(100.0f);
-        Sphere lightBall = Sphere(float3(0.0f, 0.5f, -3.0f), 0.15f, light);
-        globalScene.addBall(&lightBall);
-
-        // green
-        Material green;
-        green.type = LAMBERTIAN;
-        green.Ka = float3(0.08700f, 0.23040f, 0.04680f);
-        green.Kd = float3(0.11600f, 0.30720f, 0.06240f);
-        green.Ks = float3(0.00000f, 0.00000f, 0.00000f);
-        green.Ns = 5.00000f;
-
-        // white
-        Material white;
-        white.type = LAMBERTIAN;
-        white.Ka = float3(0.58800f, 0.51060f, 0.32220f);
-        white.Kd = float3(0.78400f, 0.68080f, 0.42960f);
-        white.Ks = float3(0.00000f, 0.00000f, 0.00000f);
-        white.Ns = 5.00000f;
-
-        // red
-        Material red;
-        red.type = LAMBERTIAN;
-        red.Ka = float3(0.40020f, 0.04920f, 0.00240f);
-        red.Kd = float3(0.53360f, 0.06560f, 0.00320f);
-        red.Ks = float3(0.00000f, 0.00000f, 0.00000f);
-        red.Ns = 5.00000f;
-
-        // metal
-        Material metal;
-        metal.type = METAL;
-        metal.Ks = float3(0.64f);
-
-        // balls
-        Sphere leftBall = Sphere(float3(-0.75f, -0.75f, -1.25f), 0.5f, green);
-        globalScene.addBall(&leftBall);
-        Sphere middleBall = Sphere(float3(0.0f, -1.25f, -1.5f), 1.0f, white);
-        globalScene.addBall(&middleBall);
-        Sphere rightBall = Sphere(float3(0.75f, -0.75f, -1.75f), 0.5f, red);
-        globalScene.addBall(&rightBall);
-
-        // moons
-        Sphere greenMoon = Sphere(float3(0.27f, 0.25f, -0.5f), 0.25f, green);
-        globalScene.addBall(&greenMoon);
-        Sphere redMoon = Sphere(float3(-0.27f, 0.25f, -0.25f), 0.25f, red);
-        globalScene.addBall(&redMoon);
-
-        // path trace
-        globalScene.preCalc();
-        globalScene.pathTrace(argc == 3 ? std::stoi(argv[2]) : 2);
-
-        // write to .ppm file
-        FILE *f = fopen(filename.c_str(), "w");
-        fprintf(f, "P3\n%d %d\n%d\n", globalWidth, globalHeight, 255);
-        for (int j = globalHeight - 1; j >= 0; --j) {
-            for (int i = 0; i < globalWidth; ++i) {
-                fprintf(f, "%d %d %d ", toInt(globalImage.pixel(i, j)[0]), toInt(globalImage.pixel(i, j)[1]), toInt(globalImage.pixel(i, j)[2]));
-            }
-        }
-    }
+    else printf("Failed to load .obj file. Goodbye.\n");
 
 }
