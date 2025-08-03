@@ -18,6 +18,7 @@ using namespace linalg::aliases;
 #include <cfloat>
 #include <vector>
 #include <cmath>
+#include <climits>
 
 // global constants
 constexpr float PI = 3.14159265358979f;
@@ -1207,7 +1208,7 @@ void BVH::sortAxis(int* obj_index, const char axis, const int li, const int ri) 
 	if ((j + 1) < ri) sortAxis(obj_index, axis, j + 1, ri);
 }
 
-// #define SAHBVH // use this in once you have SAH-BVH
+#define SAHBVH // use this in once you have SAH-BVH
 int BVH::splitBVH(int* obj_index, const int obj_num, const AABB& bbox) {
 
 #ifndef SAHBVH
