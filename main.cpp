@@ -74,8 +74,9 @@ int main(const int argc, const char* argv[]) {
         redLight.type = LIGHT;
         redLight.emission = float3(533.6f, 65.6f, 3.2f) / 2;
         redLight.Kd = float3(0.53360f, 0.06560f, 0.00320f);
-        // Sphere redMoon = Sphere(float3(-5.5f, 5.0f, -13.0f), 1.25f, redLight);
-        Sphere redMoon = Sphere(float3(-5.5f, 4.0f, -11.0f), 1.5f, redLight);
+        // Sphere redMoon = Sphere(float3(-5.5f, 5.0f, -13.0f), 1.0f, redLight);
+        // Sphere redMoon = Sphere(float3(-5.5f, 4.0f, -11.0f), 1.5f, redLight);
+        Sphere redMoon = Sphere(float3(-8.0f, 7.0f, -30.0f), 5.0f, redLight);
         globalScene.addLight(&redMoon);
 
         // green
@@ -83,8 +84,9 @@ int main(const int argc, const char* argv[]) {
         greenLight.type = LIGHT;
         greenLight.emission = float3(116.0f, 307.2f, 62.4f) / 2;
         greenLight.Kd = float3(0.11600f, 0.30720f, 0.06240f);
-        // Sphere greenMoon = Sphere(float3(-5.5f, 5.0f, -16.0f), 1.25f, greenLight);
-        Sphere greenMoon = Sphere(float3(-5.0f, 5.0f, -16.0f), 1.5f, greenLight);
+        // Sphere greenMoon = Sphere(float3(-5.5f, 5.0f, -16.0f), 1.0f, greenLight);
+        // Sphere greenMoon = Sphere(float3(-5.0f, 5.0f, -16.0f), 1.5f, greenLight);
+        Sphere greenMoon = Sphere(float3(3.0f, 10.0f, -35.0f), 5.0f, greenLight);
         globalScene.addLight(&greenMoon);
 
         // white
@@ -92,17 +94,19 @@ int main(const int argc, const char* argv[]) {
         whiteLight.type = LIGHT;
         whiteLight.emission = float3(884.0f, 780.8f, 29.6f) / 2;
         whiteLight.Kd = float3(0.88400f, 0.78080f, 0.02960f);
-        // Sphere whiteMoon = Sphere(float3(4.0f, 4.5f, -18.0f), 1.25f, whiteLight);
-        Sphere whiteMoon = Sphere(float3(4.0f, 4.5f, -18.0f), 1.5f, whiteLight);
-        globalScene.addLight(&whiteMoon);
+        // Sphere whiteMoon = Sphere(float3(4.0f, 4.5f, -18.0f), 1.0f, whiteLight);
+        // Sphere whiteMoon = Sphere(float3(4.0f, 4.5f, -18.0f), 1.5f, whiteLight);
+        // Sphere whiteMoon = Sphere(float3(5.0f, 4.5f, -30.0f), 5.0f, whiteLight);
+        // globalScene.addLight(&whiteMoon);
 
         // blue
         Material blueLight;
         blueLight.type = LIGHT;
         blueLight.emission = float3(116.0f, 62.4f, 307.2f) / 2;
         blueLight.Kd = float3(0.11600f, 0.06240f, 0.30720f);
-        // Sphere blueMoon = Sphere(float3(6.0f, 4.0f, -12.0f), 1.25f, blueLight);
-        Sphere blueMoon = Sphere(float3(7.0f, 4.0f, -14.0f), 1.5f, blueLight);
+        // Sphere blueMoon = Sphere(float3(6.0f, 4.0f, -12.0f), 1.0f, blueLight);
+        // Sphere blueMoon = Sphere(float3(7.0f, 4.0f, -14.0f), 1.5f, blueLight);
+        Sphere blueMoon = Sphere(float3(10.0f, 4.0f, -30.0f), 5.0f, blueLight);
         globalScene.addLight(&blueMoon);
 
         // black
@@ -110,9 +114,10 @@ int main(const int argc, const char* argv[]) {
         blackLight.type = MICROFACET;
         blackLight.Kd = float3(0.1f);
         blackLight.setRoughness(0.5f);
-        // Sphere blackMoon = Sphere(float3(1.5f, 3.5f, -10.0f), 1.25f, blackLight);
-        Sphere blackMoon = Sphere(float3(1.0f, 3.5f, -10.0f), 1.5f, blackLight);
-        globalScene.addBall(&blackMoon);
+        // Sphere blackMoon = Sphere(float3(1.5f, 3.5f, -10.0f), 1.0f, blackLight);
+        // Sphere blackMoon = Sphere(float3(1.0f, 3.5f, -10.0f), 1.5f, blackLight);
+        // Sphere blackMoon = Sphere(float3(2.5f, 3.5f, -10.0f), 1.0f, blackLight);
+        // globalScene.addBall(&blackMoon);
 
         // orb
         Sphere orb = Sphere(float3(-0.5f, 1.0f, -14.5f), 4.0f, glass);

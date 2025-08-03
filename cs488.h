@@ -76,8 +76,8 @@ constexpr float GLASS_TO_AIR = REFR_IND_GLASS / REFR_IND_AIR;
 constexpr float AIR_GLASS_R = (REFR_IND_AIR - REFR_IND_GLASS) * (REFR_IND_AIR - REFR_IND_GLASS) / ((REFR_IND_AIR + REFR_IND_GLASS) * (REFR_IND_AIR + REFR_IND_GLASS));
 
 // homogeneous volumetric scattering
-constexpr float ABSORPTION = 0.01f; // cornellbox: 0.0, mirrodin: 0.01
-constexpr float SCATTERING = 0.05f; // cornellbox: 1.0, mirrodin: 0.05
+constexpr float ABSORPTION = 0.005f; // cornellbox: 0.0, mirrodin: 0.01
+constexpr float SCATTERING = 0.025f; // cornellbox: 1.0, mirrodin: 0.05
 constexpr float ATTENUATION = ABSORPTION + SCATTERING;
 constexpr float ONE_OVER_ATTENUATION = 1.0f / ATTENUATION;
 
