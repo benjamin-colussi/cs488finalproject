@@ -83,7 +83,10 @@ constexpr float ONE_OVER_ATTENUATION = 1.0f / ATTENUATION;
 
 // switches
 constexpr bool ATMOSPHERIC_SCATTERING = true;
-constexpr bool FINAL_SCENE = true;
+constexpr bool RENDER_CORNELL_BOX = false;
+constexpr bool RENDER_GLASS_DIORAMA = false;
+constexpr bool RENDER_MICROFACET_DIORAMA = false;
+constexpr bool RENDER_FINAL_SCENE = true;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1787,7 +1790,7 @@ static float3 pathShader(Ray ray) {
 
 			// camera ray intersection or hit specular material
 			if (pathLength == 1 || specular) {
-				if (FINAL_SCENE) radiance += throughput * hitInfo.material->Kd * dot(hitInfo.G, wo);
+				if (RENDER_FINAL_SCENE) radiance += throughput * hitInfo.material->Kd * dot(hitInfo.G, wo);
 				else radiance += throughput * hitInfo.material->emission * dot(hitInfo.G, wo);
 			}
 
@@ -1956,7 +1959,7 @@ static float3 volumeShader(Ray ray) {
 		HitInfo hitInfo;
 
 		// into the void
-		if (!globalScene.intersect(hitInfo, ray) && FINAL_SCENE) {
+		if (!globalScene.intersect(hitInfo, ray) && RENDER_FINAL_SCENE) {
 			hitInfo.t = FLT_MAX;
 			hitInfo.inside = false;
 		}
@@ -2039,7 +2042,7 @@ static float3 volumeShader(Ray ray) {
 
 				// camera ray intersection or hit specular material
 				if (pathLength == 1 || specular) {
-					if (FINAL_SCENE) radiance += throughput * hitInfo.material->Kd * dot(hitInfo.G, wo);
+					if (RENDER_FINAL_SCENE) radiance += throughput * hitInfo.material->Kd * dot(hitInfo.G, wo);
 					else radiance += throughput * hitInfo.material->emission * dot(hitInfo.G, wo);
 				}
 
